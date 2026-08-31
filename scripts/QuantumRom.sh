@@ -535,7 +535,7 @@ DISABLE_FBE() {
     fi
 
     if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
-        return 1
+        return 0
     fi
 
     local fstab_files=$(grep -lr 'fileencryption' "${EXTRACTED_FIRM_DIR}/vendor/etc" 2>/dev/null)
@@ -547,6 +547,7 @@ DISABLE_FBE() {
             sed -i -e 's/^\([^#].*\)fileencryption=[^,]*\(.*\)$/# &\n\1encryptable\2/g' "$i"
         fi
     done
+    return 0
 }
 
 
@@ -559,7 +560,7 @@ DISABLE_FDE() {
     fi
 
     if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
-        return 1
+        return 0
     fi
 
     local fstab_files=$(grep -lr 'forceencrypt' "${EXTRACTED_FIRM_DIR}/vendor/etc" 2>/dev/null)
@@ -568,11 +569,10 @@ DISABLE_FDE() {
         if [ -f "$i" ]; then
             echo -e "- Disabling full-disk encryption (FDE) for /data..."
             echo -e "- Found $i."
-            md5=$(md5 "$i")
             sed -i -e 's/^\([^#].*\)forceencrypt=[^,]*\(.*\)$/# &\n\1encryptable\2/g' "$i"
-            file_changed "$i" "$md5"
         fi
     done
+    return 0
 }
 
 
