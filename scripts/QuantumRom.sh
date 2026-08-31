@@ -719,27 +719,42 @@ HEX_PATCH() {
 
     [ ! -f "$FILE" ] && { echo -e "File not found: $FILE"; return 1; }
 
-    xxd -p -c 0 "$FILE" | grep -q "$FROM" || {
-        echo -e "- Pattern not found: $FROM"
-        return 1
-    }
-
     echo -e "- Patching: $FILE"
     echo -e "- From $FROM to $TO"
-    [ -f "$FILE.bak" ] || cp "$FILE" "$FILE.bak"
 
-    xxd -p -c 0 "$FILE" | sed "s/$FROM/$TO/" | xxd -r -p > "$FILE.tmp" &&
-    mv "$FILE.tmp" "$FILE"
+    python3 -c "
+import sys, re
 
-    xxd -p -c 0 "$FILE" | grep -q "$TO" && {
+file_path = sys.argv[1]
+from_pattern = sys.argv[2].lower()
+to_pattern = sys.argv[3].lower()
+
+try:
+    with open(file_path, 'rb') as f:
+        content = f.read()
+except Exception:
+    sys.exit(1)
+
+hex_content = content.hex()
+from_regex = from_pattern.replace('..', '[0-9a-f]{2}')
+match = re.search(from_regex, hex_content, re.IGNORECASE)
+if not match:
+    sys.exit(1)
+
+start, end = match.span()
+new_hex_content = hex_content[:start] + to_pattern + hex_content[end:]
+
+with open(file_path, 'wb') as f:
+    f.write(bytes.fromhex(new_hex_content))
+" "$FILE" "$FROM" "$TO"
+
+    if [ $? -eq 0 ]; then
         echo -e "- Patch success"
-        rm -rf "$FILE.bak"        
         return 0
-    }
-
-    echo -e "- Patch failed, restoring backup"
-    mv "$FILE.bak" "$FILE"
-    return 1
+    else
+        echo -e "- Pattern not found or patch failed: $FROM"
+        return 1
+    fi
 }
 
 
