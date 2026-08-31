@@ -6,7 +6,7 @@ on:
       STOCK_DEVICE:
         description: "STOCK_DEVICE_MODEL or None"
         required: true
-        default: "SM-A225F"
+        default: "SM-P613"
 
       USE_UI_8_TETHERING_APEX:
         description: "Set True if your kernel BPF version is 5.4 (lower than 5.10)."
@@ -16,12 +16,12 @@ on:
       TARGET_DEVICE:
         description: "TARGET_DEVICE_MODEL."
         required: true
-        default: "SM-A346E"
+        default: "SM-P620"
 
       TARGET_DEVICE_CSC:
         description: "TARGET_DEVICE_CSC."
         required: true
-        default: "BKD"
+        default: "EUX"
 
       TARGET_FW_VERSION:
         description: "Specific Samsung firmware version (PDA/CSC/MODEM) OR (AP/CSC/CP)"
@@ -45,12 +45,12 @@ on:
       ADD_CHINA_SMART_MANAGER:
         description: "Add china smart manager (True/False)"
         required: true
-        default: "True"
+        default: "False"
 
       ADD_SAMSUNG_FLAGSHIP_APPS:
         description: "Add samsung flagship apps (True/False)"
         required: true
-        default: "True"
+        default: "False"
 
       ADD_CUSTOM_FEATURES:
         description: "Add samsung custom features (True/False)"
@@ -60,7 +60,7 @@ on:
       PATCH_FLAG_SECURE:
         description: "Bypass screenshot and screen record detection (True/False)"
         required: true
-        default: "True"
+        default: "False"
 
       PATCH_SECURE_FOLDER:
         description: "Patch samsung secure folder (True/False)"
