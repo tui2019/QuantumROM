@@ -1831,6 +1831,17 @@ FIX_CAMERA() {
             cp -rfa "$(pwd)/QuantumROM/Mods/Apps/MTK_Camera_Files_Android_${ANDROID_VERSION}/system/." "${EXTRACTED_FIRM_DIR}/system/system"
         fi
     fi
+
+    if [ "$STOCK_DEVICE_CHIPSET" = "Snapdragon" ]; then
+        echo "- Patching Snapdragon camera and video recording libraries."
+        # Force Qualcomm vendor = 2 in libcore2nativeutil (fixes black preview screen)
+        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib64/libcore2nativeutil.camera.samsung.so" "20008052c0035fd6" "40008052c0035fd6"
+        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib/libcore2nativeutil.camera.samsung.so" "01207047" "02207047"
+
+        # Fix ACodec FORTIFY buffer overflow in libstagefright (fixes video recording freeze)
+        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib64/libstagefright.so" "2100805202408052" "21008052e21f8052"
+        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib/libstagefright.so" "01214ff40072" "01214ff0ff02"
+    fi
 }
 
 
