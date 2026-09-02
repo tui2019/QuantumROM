@@ -2826,7 +2826,6 @@ BUILD_SUPER_IMG() {
         --group qti_dynamic_partitions:$GROUP_SIZE \
         --group main:$GROUP_SIZE \
         --block-size 4096 \
-        --sparse \
         $PARTITIONS \
         $IMAGES \
         --output "$OUTPUT_IMG"
