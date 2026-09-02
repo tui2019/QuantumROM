@@ -2498,6 +2498,18 @@ GEN_FS_CONFIG() {
 
     rm -f "$TMP_EXISTING"
 
+    # Prune any entries in fs_config for files that do not exist on disk
+    local TMP_CLEAN="$(mktemp)"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [ -z "$line" ] && continue
+        local p=$(echo "$line" | awk '{print $1}')
+        local rel_p="${p#${PARTITION}/}"
+        if [ "$p" = "$PARTITION" ] || [ -e "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ] || [ -L "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ]; then
+            echo "$line" >> "$TMP_CLEAN"
+        fi
+    done < "$FS_CONFIG"
+    mv "$TMP_CLEAN" "$FS_CONFIG"
+
     echo -e "- $PARTITION fs_config generated"
 }
 
@@ -2661,7 +2673,7 @@ BUILD_IMG() {
                 -z lz4hc \
                 -b 4096 \
                 -T 1199145600 \
-                "$OUT_IMG" "$SOURCE_DIR" >/dev/null 2>&1
+                "$OUT_IMG" "$SOURCE_DIR"
 
         elif [[ "$FILE_SYSTEM" == "ext4" ]]; then
             echo " "
@@ -2843,18 +2855,36 @@ INTEGRATE_CUSTOM_VENDOR() {
     else
         echo "[+] Copying vendor root contents..."
         cp -a "$VENDOR_SRC_DIR/." "${EXTRACTED_FIRM_DIR}/vendor/"
-        rm -rf "${EXTRACTED_FIRM_DIR}/vendor/.git"
     fi
+
+    # Handle vendor config if present in vendor repo
+    if [ -d "$VENDOR_SRC_DIR/config" ]; then
+        echo "[+] Using vendor config from repository..."
+        mkdir -p "${EXTRACTED_FIRM_DIR}/config"
+        [ -f "$VENDOR_SRC_DIR/config/vendor_fs_config" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config"
+        [ -f "$VENDOR_SRC_DIR/config/vendor_file_contexts" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_file_contexts" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
+        [ -f "$VENDOR_SRC_DIR/config/odm_fs_config" ] && cp -f "$VENDOR_SRC_DIR/config/odm_fs_config" "${EXTRACTED_FIRM_DIR}/config/odm_fs_config"
+        [ -f "$VENDOR_SRC_DIR/config/odm_file_contexts" ] && cp -f "$VENDOR_SRC_DIR/config/odm_file_contexts" "${EXTRACTED_FIRM_DIR}/config/odm_file_contexts"
+    else
+        # Clear old Exynos vendor config so it gets generated cleanly
+        rm -f "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
+    fi
+
+    # Clean non-vendor artifacts
+    rm -rf "${EXTRACTED_FIRM_DIR}/vendor/config"
+    rm -rf "${EXTRACTED_FIRM_DIR}/vendor/.git" "${EXTRACTED_FIRM_DIR}/vendor/.github"
 
     if [ -d "$VENDOR_SRC_DIR/odm" ]; then
         echo "[+] Copying custom ODM..."
         rm -rf "${EXTRACTED_FIRM_DIR}/odm"
         mkdir -p "${EXTRACTED_FIRM_DIR}/odm"
         cp -a "$VENDOR_SRC_DIR/odm/." "${EXTRACTED_FIRM_DIR}/odm/"
+        rm -rf "${EXTRACTED_FIRM_DIR}/odm/.git" "${EXTRACTED_FIRM_DIR}/odm/.github" "${EXTRACTED_FIRM_DIR}/odm/config"
     fi
 
     echo "Custom vendor integration complete."
 }
+
 
 
 DOWNLOAD_KERNEL_PACKAGE() {
