@@ -2802,7 +2802,7 @@ BUILD_SUPER_IMG() {
 
         echo "Adding: $part_name ($size bytes)"
 
-        PARTITIONS+=" --partition ${part_name}:readonly:${size}:main"
+        PARTITIONS+=" --partition ${part_name}:readonly:${size}:qti_dynamic_partitions"
         IMAGES+=" --image ${part_name}=$img"
         TOTAL_SIZE=$((TOTAL_SIZE + size))
         VALID_IMAGES=1
@@ -2815,12 +2815,18 @@ BUILD_SUPER_IMG() {
 
     TOTAL_SIZE=$((TOTAL_SIZE + 4194304))
 
+    local SUPER_DEVICE_SIZE=8891924480
+    local GROUP_SIZE=$((TOTAL_SIZE + 33554432))
+    [ "$GROUP_SIZE" -gt "$SUPER_DEVICE_SIZE" ] && SUPER_DEVICE_SIZE=$((GROUP_SIZE + 4194304))
+
     $lpmake \
-	    --device super:$TOTAL_SIZE \
+        --device super:$SUPER_DEVICE_SIZE \
         --metadata-size 65536 \
         --metadata-slots 2 \
-		--group main:$TOTAL_SIZE \
-		--block-size 4096 \
+        --group qti_dynamic_partitions:$GROUP_SIZE \
+        --group main:$GROUP_SIZE \
+        --block-size 4096 \
+        --sparse \
         $PARTITIONS \
         $IMAGES \
         --output "$OUTPUT_IMG"

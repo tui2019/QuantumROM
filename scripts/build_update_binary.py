@@ -7,13 +7,7 @@ def main():
     bb_path = os.path.join(installer_dir, "tools", "busybox")
     lp_path = os.path.join(installer_dir, "tools", "lptools_static")
 
-    with open(bb_path, "rb") as f:
-        bb_gz = gzip.compress(f.read(), compresslevel=9)
-
-    with open(lp_path, "rb") as f:
-        lp_gz = gzip.compress(f.read(), compresslevel=9)
-
-    # We can create a tar containing busybox and lptools_static, and gzip it!
+    # Create a tar containing busybox and lptools_static, and gzip it
     import io, tarfile
     tar_buf = io.BytesIO()
     with tarfile.open(fileobj=tar_buf, mode="w:gz") as tar:
@@ -99,9 +93,32 @@ SUPER_DEV="/dev/block/by-name/super"
 [ ! -e "$SUPER_DEV" ] && SUPER_DEV="/dev/block/bootdevice/by-name/super"
 [ ! -e "$SUPER_DEV" ] && SUPER_DEV=$(find /dev/block -name "super" 2>/dev/null | head -n 1)
 
-if [ -e "$SUPER_DEV" ]; then
-    ui_print "[+] Dynamic super partition: $SUPER_DEV"
-    if [ -x "$LPTOOLS" ]; then
+# Check if super.img is provided (Direct Boot + Super Combo)
+SUPER_IN_ZIP=""
+if unzip -l "$ZIPFILE" "images/super.img" >/dev/null 2>&1; then
+    SUPER_IN_ZIP="images/super.img"
+elif unzip -l "$ZIPFILE" "super.img" >/dev/null 2>&1; then
+    SUPER_IN_ZIP="super.img"
+fi
+
+if [ -n "$SUPER_IN_ZIP" ] && [ -e "$SUPER_DEV" ]; then
+    ui_print " "
+    ui_print "============================================"
+    ui_print "     Flashing Dynamic Super Partition       "
+    ui_print "============================================"
+    ui_print "[*] Flashing $SUPER_IN_ZIP directly to $SUPER_DEV..."
+    set_progress 0.20
+    if [ -x "$BUSYBOX" ]; then
+        "$BUSYBOX" unzip -p "$ZIPFILE" "$SUPER_IN_ZIP" | "$BUSYBOX" dd of="$SUPER_DEV" bs=4M 2>/dev/null || "$BUSYBOX" unzip -p "$ZIPFILE" "$SUPER_IN_ZIP" | "$BUSYBOX" dd of="$SUPER_DEV" bs=1M
+    else
+        unzip -p "$ZIPFILE" "$SUPER_IN_ZIP" | dd of="$SUPER_DEV" bs=4M 2>/dev/null || unzip -p "$ZIPFILE" "$SUPER_IN_ZIP" | dd of="$SUPER_DEV" bs=1M
+    fi
+    ui_print "[+] super.img flashed successfully!"
+    set_progress 0.80
+
+else
+    # Fallback to logical partition streaming
+    if [ -e "$SUPER_DEV" ] && [ -x "$LPTOOLS" ]; then
         ui_print "[*] Preparing dynamic super partition..."
         "$LPTOOLS" unlimited-group main 2>/dev/null || true
         "$LPTOOLS" unlimited-group qti_dynamic_partitions 2>/dev/null || true
@@ -124,76 +141,113 @@ if [ -e "$SUPER_DEV" ]; then
         "$LPTOOLS" resize vendor 628994048 2>/dev/null || true
         "$LPTOOLS" map vendor 2>/dev/null || true
     fi
-fi
 
-stream_partition() {
-    local PART="$1"
-    local DISPLAY_MB="$2"
-    local BLOCK_DEV=""
+    stream_partition() {
+        local PART="$1"
+        local DISPLAY_MB="$2"
+        local BLOCK_DEV=""
 
-    ui_print "[*] Flashing $PART (${DISPLAY_MB} MB)..."
+        ui_print "[*] Flashing $PART (${DISPLAY_MB} MB)..."
 
-    # Find mapped block device
-    if [ -e "/dev/block/mapper/$PART" ]; then
-        BLOCK_DEV="/dev/block/mapper/$PART"
-    elif [ -e "/dev/block/bootdevice/by-name/$PART" ]; then
-        BLOCK_DEV="/dev/block/bootdevice/by-name/$PART"
-    elif [ -e "/dev/block/by-name/$PART" ]; then
-        BLOCK_DEV="/dev/block/by-name/$PART"
-    fi
-
-    if [ -n "$BLOCK_DEV" ] && [ -e "$BLOCK_DEV" ]; then
-        ui_print "    Writing image to $BLOCK_DEV..."
-        if [ -x "$BUSYBOX" ]; then
-            "$BUSYBOX" unzip -p "$ZIPFILE" "images/${PART}.img" | "$BUSYBOX" dd of="$BLOCK_DEV" bs=4M 2>/dev/null || "$BUSYBOX" unzip -p "$ZIPFILE" "images/${PART}.img" | "$BUSYBOX" dd of="$BLOCK_DEV" bs=1M
-        else
-            unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=4M 2>/dev/null || unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=1M
+        if [ -e "/dev/block/mapper/$PART" ]; then
+            BLOCK_DEV="/dev/block/mapper/$PART"
+        elif [ -e "/dev/block/bootdevice/by-name/$PART" ]; then
+            BLOCK_DEV="/dev/block/bootdevice/by-name/$PART"
+        elif [ -e "/dev/block/by-name/$PART" ]; then
+            BLOCK_DEV="/dev/block/by-name/$PART"
         fi
-        ui_print "[+] Successfully flashed $PART!"
-    else
-        ui_print "[!] Error: Block device for $PART not found!"
-    fi
-}
 
-# -----------------------------------------------------------------------------
-# SEQUENTIAL STREAMING PIPELINE (Matches exact archive order to avoid FUSE seeks)
-# -----------------------------------------------------------------------------
+        if [ -n "$BLOCK_DEV" ] && [ -e "$BLOCK_DEV" ]; then
+            ui_print "    Writing image to $BLOCK_DEV..."
+            if [ -x "$BUSYBOX" ]; then
+                "$BUSYBOX" unzip -p "$ZIPFILE" "images/${PART}.img" | "$BUSYBOX" dd of="$BLOCK_DEV" bs=4M 2>/dev/null || "$BUSYBOX" unzip -p "$ZIPFILE" "images/${PART}.img" | "$BUSYBOX" dd of="$BLOCK_DEV" bs=1M
+            else
+                unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=4M 2>/dev/null || unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=1M
+            fi
+            ui_print "[+] Successfully flashed $PART!"
+        fi
+    }
 
-set_progress 0.10
-stream_partition "product" "912"
+    set_progress 0.10
+    stream_partition "product" "912"
 
-set_progress 0.35
-stream_partition "system" "2932"
+    set_progress 0.35
+    stream_partition "system" "2932"
 
-set_progress 0.75
-stream_partition "vendor" "600"
+    set_progress 0.75
+    stream_partition "vendor" "600"
+fi
 
 set_progress 0.85
 
-# Flash Kernel (AnyKernel / boot.img)
+# -----------------------------------------------------------------------------
+# FLASH BOOT & DTBO IMAGES (Direct Boot Flash)
+# -----------------------------------------------------------------------------
 ui_print " "
 ui_print "============================================"
 ui_print "       Installing Kernel & Boot Image       "
 ui_print "============================================"
 
-# Execute bundled AnyKernel package
-ui_print "[*] Extracting and executing kernel installer..."
-mkdir -p "$TMP_DIR/kernel/ak3"
-if [ -x "$BUSYBOX" ]; then
-    "$BUSYBOX" unzip -p "$ZIPFILE" "kernel/kernel.zip" > "$TMP_DIR/kernel/kernel.zip"
-    "$BUSYBOX" unzip -o "$TMP_DIR/kernel/kernel.zip" -d "$TMP_DIR/kernel/ak3" >/dev/null 2>&1
-else
-    unzip -p "$ZIPFILE" "kernel/kernel.zip" > "$TMP_DIR/kernel/kernel.zip"
-    unzip -o "$TMP_DIR/kernel/kernel.zip" -d "$TMP_DIR/kernel/ak3" >/dev/null 2>&1
-fi
-chmod -R 755 "$TMP_DIR/kernel/ak3"
+BOOT_DEV="/dev/block/bootdevice/by-name/boot"
+[ ! -e "$BOOT_DEV" ] && BOOT_DEV="/dev/block/by-name/boot"
 
-if [ -f "$TMP_DIR/kernel/ak3/anykernel.sh" ]; then
-    cd "$TMP_DIR/kernel/ak3"
-    sh anykernel.sh "$TMP_DIR/kernel/kernel.zip" 2>&1 | while IFS= read -r line; do
-        ui_print "    $line"
-    done
-    ui_print "[+] Kernel patched and flashed!"
+BOOT_IN_ZIP=""
+if unzip -l "$ZIPFILE" "images/boot.img" >/dev/null 2>&1; then
+    BOOT_IN_ZIP="images/boot.img"
+elif unzip -l "$ZIPFILE" "boot.img" >/dev/null 2>&1; then
+    BOOT_IN_ZIP="boot.img"
+fi
+
+if [ -n "$BOOT_IN_ZIP" ] && [ -e "$BOOT_DEV" ]; then
+    ui_print "[*] Flashing boot.img directly to $BOOT_DEV..."
+    if [ -x "$BUSYBOX" ]; then
+        "$BUSYBOX" unzip -p "$ZIPFILE" "$BOOT_IN_ZIP" | "$BUSYBOX" dd of="$BOOT_DEV" bs=4M
+    else
+        unzip -p "$ZIPFILE" "$BOOT_IN_ZIP" | dd of="$BOOT_DEV" bs=4M
+    fi
+    ui_print "[+] boot.img flashed successfully!"
+fi
+
+DTBO_DEV="/dev/block/bootdevice/by-name/dtbo"
+[ ! -e "$DTBO_DEV" ] && DTBO_DEV="/dev/block/by-name/dtbo"
+
+DTBO_IN_ZIP=""
+if unzip -l "$ZIPFILE" "images/dtbo.img" >/dev/null 2>&1; then
+    DTBO_IN_ZIP="images/dtbo.img"
+elif unzip -l "$ZIPFILE" "dtbo.img" >/dev/null 2>&1; then
+    DTBO_IN_ZIP="dtbo.img"
+fi
+
+if [ -n "$DTBO_IN_ZIP" ] && [ -e "$DTBO_DEV" ]; then
+    ui_print "[*] Flashing dtbo.img directly to $DTBO_DEV..."
+    if [ -x "$BUSYBOX" ]; then
+        "$BUSYBOX" unzip -p "$ZIPFILE" "$DTBO_IN_ZIP" | "$BUSYBOX" dd of="$DTBO_DEV" bs=4M
+    else
+        unzip -p "$ZIPFILE" "$DTBO_IN_ZIP" | dd of="$DTBO_DEV" bs=4M
+    fi
+    ui_print "[+] dtbo.img flashed successfully!"
+fi
+
+# Fallback to AnyKernel if direct boot.img is not present
+if [ -z "$BOOT_IN_ZIP" ] && unzip -l "$ZIPFILE" "kernel/kernel.zip" >/dev/null 2>&1; then
+    ui_print "[*] Extracting and executing AnyKernel installer..."
+    mkdir -p "$TMP_DIR/kernel/ak3"
+    if [ -x "$BUSYBOX" ]; then
+        "$BUSYBOX" unzip -p "$ZIPFILE" "kernel/kernel.zip" > "$TMP_DIR/kernel/kernel.zip"
+        "$BUSYBOX" unzip -o "$TMP_DIR/kernel/kernel.zip" -d "$TMP_DIR/kernel/ak3" >/dev/null 2>&1
+    else
+        unzip -p "$ZIPFILE" "kernel/kernel.zip" > "$TMP_DIR/kernel/kernel.zip"
+        unzip -o "$TMP_DIR/kernel/kernel.zip" -d "$TMP_DIR/kernel/ak3" >/dev/null 2>&1
+    fi
+    chmod -R 755 "$TMP_DIR/kernel/ak3"
+
+    if [ -f "$TMP_DIR/kernel/ak3/anykernel.sh" ]; then
+        cd "$TMP_DIR/kernel/ak3"
+        sh anykernel.sh "$TMP_DIR/kernel/kernel.zip" 2>&1 | while IFS= read -r line; do
+            ui_print "    $line"
+        done
+        ui_print "[+] Kernel patched and flashed!"
+    fi
 fi
 
 # Cleanup

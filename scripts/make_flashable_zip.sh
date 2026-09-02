@@ -38,6 +38,11 @@ fi
 
 # Copy Partition Images
 echo "[*] Copying partition images to package..."
+if [ -f "$OUT_DIR/super.img" ]; then
+    echo " [+] Adding super.img ($(du -h "$OUT_DIR/super.img" | cut -f1))"
+    cp -f "$OUT_DIR/super.img" "$BUILD_PKG_DIR/images/super.img"
+fi
+
 for part in system vendor product odm system_ext; do
     if [ -f "$OUT_DIR/${part}.img" ]; then
         echo " [+] Adding ${part}.img ($(du -h "$OUT_DIR/${part}.img" | cut -f1))"
