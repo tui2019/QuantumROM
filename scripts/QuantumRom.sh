@@ -2879,12 +2879,24 @@ INTEGRATE_CUSTOM_VENDOR() {
     rm -rf "${EXTRACTED_FIRM_DIR}/vendor/config"
     rm -rf "${EXTRACTED_FIRM_DIR}/vendor/.git" "${EXTRACTED_FIRM_DIR}/vendor/.github"
 
+    # Ensure critical Qualcomm mountpoint folders exist in vendor
+    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/firmware_mnt"
+    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/firmware-modem"
+    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/bt_firmware"
+    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/dsp"
+
     if [ -d "$VENDOR_SRC_DIR/odm" ]; then
         echo "[+] Copying custom ODM..."
         rm -rf "${EXTRACTED_FIRM_DIR}/odm"
         mkdir -p "${EXTRACTED_FIRM_DIR}/odm"
         cp -a "$VENDOR_SRC_DIR/odm/." "${EXTRACTED_FIRM_DIR}/odm/"
         rm -rf "${EXTRACTED_FIRM_DIR}/odm/.git" "${EXTRACTED_FIRM_DIR}/odm/.github" "${EXTRACTED_FIRM_DIR}/odm/config"
+    fi
+
+    # Ensure minimal odm exists for dynamic partition early mount
+    if [ ! -d "${EXTRACTED_FIRM_DIR}/odm" ]; then
+        mkdir -p "${EXTRACTED_FIRM_DIR}/odm/etc"
+        echo "ro.odm.build.version.release=16" > "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
     fi
 
     echo "Custom vendor integration complete."
