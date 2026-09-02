@@ -110,6 +110,9 @@ jobs:
  
       - name: Validate STOCK_DEVICE - ${{ inputs.STOCK_DEVICE }}
         run: |
+          REPO="SN-Abdullah-Al-Noman/QuantumROM"
+          BRANCH="Devices"
+
           source "$(pwd)/scripts/git_utils.sh"
 
           if [ "$STOCK_DEVICE" != "None" ]; then
@@ -122,7 +125,7 @@ jobs:
 
               echo "✅ Device supported: $STOCK_DEVICE"
               GIT_SPARSE_DOWNLOAD "SN-Abdullah-Al-Noman/QuantumROM" "Devices" "$STOCK_DEVICE" \
-                  "$(pwd)/QuantumRom/Devices/$STOCK_DEVICE"
+                  "$(pwd)/QuantumROM/Devices/$STOCK_DEVICE"
           else
               echo "ℹ️ STOCK_DEVICE is set to None."
           fi
