@@ -8,11 +8,11 @@ OUTFD="$2"
 ZIPFILE="$3"
 
 ui_print() {
-    printf "ui_print %s\nui_print\n" "$1" >&$OUTFD 2>/dev/null || printf "%s\n" "$1"
+    eval "printf 'ui_print %s\nui_print\n' \"\$1\" >&$OUTFD" 2>/dev/null || printf "%s\n" "$1"
 }
 
 set_progress() {
-    printf "set_progress %s\n" "$1" >&$OUTFD 2>/dev/null || true
+    eval "printf 'set_progress %s\n' \"\$1\" >&$OUTFD" 2>/dev/null || true
 }
 
 ui_print "============================================"
@@ -27,21 +27,6 @@ mkdir -p "$TMP_DIR"
 mkdir -p "$TMP_DIR/tools"
 
 set_progress 0.05
-
-# Extract bundled tools
-unzip -o "$ZIPFILE" "tools/*" -d "$TMP_DIR" >/dev/null 2>&1 || true
-
-BUSYBOX="$TMP_DIR/tools/busybox"
-[ ! -x "$BUSYBOX" ] && BUSYBOX="/tmp/busybox"
-[ ! -x "$BUSYBOX" ] && BUSYBOX="busybox"
-
-LPTOOLS="$TMP_DIR/tools/lptools_static"
-[ ! -x "$LPTOOLS" ] && LPTOOLS="/tmp/lptools_static"
-[ ! -x "$LPTOOLS" ] && LPTOOLS="$TMP_DIR/tools/lptools"
-[ ! -x "$LPTOOLS" ] && LPTOOLS="/sbin/lptools"
-[ ! -x "$LPTOOLS" ] && LPTOOLS="/system/bin/lptools"
-
-chmod -R 755 "$TMP_DIR/tools" 2>/dev/null || true
 
 # Verify device
 DEVICE=$(getprop ro.product.device)
@@ -63,7 +48,21 @@ esac
 ui_print "[*] Unmounting existing partitions..."
 umount /system /system_root /vendor /product /odm /system_ext 2>/dev/null || true
 
-# Dynamic partition helper
+# Extract bundled tools
+unzip -o "$ZIPFILE" "tools/*" -d "$TMP_DIR" >/dev/null 2>&1 || true
+chmod -R 755 "$TMP_DIR/tools" 2>/dev/null || true
+
+BUSYBOX="$TMP_DIR/tools/busybox"
+[ ! -x "$BUSYBOX" ] && BUSYBOX="/tmp/busybox"
+[ ! -x "$BUSYBOX" ] && BUSYBOX="busybox"
+
+LPTOOLS="$TMP_DIR/tools/lptools_static"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="/tmp/lptools_static"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="$TMP_DIR/tools/lptools"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="/sbin/lptools"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="/system/bin/lptools"
+
+# Dynamic super partition helper
 SUPER_DEV="/dev/block/by-name/super"
 [ ! -e "$SUPER_DEV" ] && SUPER_DEV="/dev/block/bootdevice/by-name/super"
 [ ! -e "$SUPER_DEV" ] && SUPER_DEV=$(find /dev/block -name "super" 2>/dev/null | head -n 1)
@@ -71,45 +70,36 @@ SUPER_DEV="/dev/block/by-name/super"
 if [ -e "$SUPER_DEV" ]; then
     ui_print "[+] Dynamic super partition: $SUPER_DEV"
     if [ -x "$LPTOOLS" ]; then
-        ui_print "[*] Unlocking dynamic partition group limits..."
+        ui_print "[*] Preparing dynamic super partition..."
         "$LPTOOLS" unlimited-group main 2>/dev/null || true
         "$LPTOOLS" unlimited-group qti_dynamic_partitions 2>/dev/null || true
         "$LPTOOLS" unlimited-group default 2>/dev/null || true
+
+        # Pre-allocate and map all partitions up-front to ensure sequential writes
+        ui_print "    Allocating logical partitions (product, system, vendor)..."
+        "$LPTOOLS" unmap product 2>/dev/null || true
+        "$LPTOOLS" create product 957112320 2>/dev/null || true
+        "$LPTOOLS" resize product 957112320 2>/dev/null || true
+        "$LPTOOLS" map product 2>/dev/null || true
+
+        "$LPTOOLS" unmap system 2>/dev/null || true
+        "$LPTOOLS" create system 3074949120 2>/dev/null || true
+        "$LPTOOLS" resize system 3074949120 2>/dev/null || true
+        "$LPTOOLS" map system 2>/dev/null || true
+
+        "$LPTOOLS" unmap vendor 2>/dev/null || true
+        "$LPTOOLS" create vendor 628994048 2>/dev/null || true
+        "$LPTOOLS" resize vendor 628994048 2>/dev/null || true
+        "$LPTOOLS" map vendor 2>/dev/null || true
     fi
 fi
 
-prepare_logical_partition() {
+stream_partition() {
     local PART="$1"
-    local SIZE_BYTES="$2"
-    local DISPLAY_MB="$3"
-
-    ui_print "[*] Preparing dynamic partition: $PART (${DISPLAY_MB} MB)..."
-
-    if [ -x "$LPTOOLS" ] && [ -e "$SUPER_DEV" ]; then
-        "$LPTOOLS" unmap "$PART" 2>/dev/null || true
-        "$LPTOOLS" create "$PART" "$SIZE_BYTES" 2>/dev/null || true
-        "$LPTOOLS" resize "$PART" "$SIZE_BYTES" 2>/dev/null || true
-        "$LPTOOLS" map "$PART" 2>/dev/null || true
-    fi
-}
-
-flash_partition() {
-    local PART="$1"
+    local DISPLAY_MB="$2"
     local BLOCK_DEV=""
 
-    # Check if image exists in ZIP
-    if ! unzip -l "$ZIPFILE" "images/${PART}.img" >/dev/null 2>&1; then
-        ui_print "[-] images/${PART}.img not present in zip, skipping."
-        return 0
-    fi
-
-    case "$PART" in
-        system)  prepare_logical_partition "system" "3074949120" "2932" ;;
-        vendor)  prepare_logical_partition "vendor" "628994048" "600" ;;
-        product) prepare_logical_partition "product" "957112320" "912" ;;
-        odm)     prepare_logical_partition "odm" "67108864" "64" ;;
-        *)       prepare_logical_partition "$PART" "1073741824" "1024" ;;
-    esac
+    ui_print "[*] Flashing $PART (${DISPLAY_MB} MB)..."
 
     # Find mapped block device
     if [ -e "/dev/block/mapper/$PART" ]; then
@@ -133,81 +123,55 @@ flash_partition() {
     fi
 }
 
-set_progress 0.15
-flash_partition "system"
+# -----------------------------------------------------------------------------
+# SEQUENTIAL STREAMING PIPELINE (Matches exact archive order to avoid FUSE seeks)
+# -----------------------------------------------------------------------------
 
-set_progress 0.45
-flash_partition "vendor"
+set_progress 0.10
+stream_partition "product" "912"
 
-set_progress 0.65
-flash_partition "product"
+set_progress 0.35
+stream_partition "system" "2932"
 
-set_progress 0.80
-if unzip -l "$ZIPFILE" "images/odm.img" >/dev/null 2>&1; then
-    flash_partition "odm"
-fi
-
-if unzip -l "$ZIPFILE" "images/system_ext.img" >/dev/null 2>&1; then
-    flash_partition "system_ext"
-fi
+set_progress 0.75
+stream_partition "vendor" "600"
 
 set_progress 0.85
 
-# Flash Kernel & DTBO
+# Flash Kernel (AnyKernel / boot.img)
 ui_print " "
 ui_print "============================================"
 ui_print "       Installing Kernel & Boot Image       "
 ui_print "============================================"
 
-# Check if direct boot.img / dtbo.img exist
-if unzip -l "$ZIPFILE" "images/boot.img" >/dev/null 2>&1; then
-    BOOT_DEV="/dev/block/by-name/boot"
-    [ ! -e "$BOOT_DEV" ] && BOOT_DEV="/dev/block/bootdevice/by-name/boot"
-    if [ -e "$BOOT_DEV" ]; then
-        ui_print "[*] Streaming boot.img to $BOOT_DEV..."
-        if [ -x "$BUSYBOX" ]; then
-            $BUSYBOX unzip -p "$ZIPFILE" "images/boot.img" | $BUSYBOX dd of="$BOOT_DEV" bs=4M
-        else
-            unzip -p "$ZIPFILE" "images/boot.img" | dd of="$BOOT_DEV" bs=4M
-        fi
-        ui_print "[+] boot.img flashed successfully!"
-    fi
+if [ -f "$TMP_DIR/tools/magiskboot" ]; then
+    cp -f "$TMP_DIR/tools/magiskboot" /tmp/magiskboot 2>/dev/null || true
+    chmod 755 /tmp/magiskboot 2>/dev/null || true
 fi
 
-if unzip -l "$ZIPFILE" "images/dtbo.img" >/dev/null 2>&1; then
-    DTBO_DEV="/dev/block/by-name/dtbo"
-    [ ! -e "$DTBO_DEV" ] && DTBO_DEV="/dev/block/bootdevice/by-name/dtbo"
-    if [ -e "$DTBO_DEV" ]; then
-        ui_print "[*] Streaming dtbo.img to $DTBO_DEV..."
-        if [ -x "$BUSYBOX" ]; then
-            $BUSYBOX unzip -p "$ZIPFILE" "images/dtbo.img" | $BUSYBOX dd of="$DTBO_DEV" bs=4M
-        else
-            unzip -p "$ZIPFILE" "images/dtbo.img" | dd of="$DTBO_DEV" bs=4M
-        fi
-        ui_print "[+] dtbo.img flashed successfully!"
-    fi
-fi
-
-# Fallback: execute bundled AnyKernel package if present
-if unzip -l "$ZIPFILE" "kernel/kernel.zip" >/dev/null 2>&1; then
-    ui_print "[*] Found bundled AnyKernel package. Executing installer..."
-    mkdir -p "$TMP_DIR/kernel/ak3"
+# Execute bundled AnyKernel package
+ui_print "[*] Extracting and executing kernel installer..."
+mkdir -p "$TMP_DIR/kernel/ak3"
+if [ -x "$BUSYBOX" ]; then
+    $BUSYBOX unzip -p "$ZIPFILE" "kernel/kernel.zip" > "$TMP_DIR/kernel/kernel.zip"
+    $BUSYBOX unzip -o "$TMP_DIR/kernel/kernel.zip" -d "$TMP_DIR/kernel/ak3" >/dev/null 2>&1
+else
     unzip -p "$ZIPFILE" "kernel/kernel.zip" > "$TMP_DIR/kernel/kernel.zip"
     unzip -o "$TMP_DIR/kernel/kernel.zip" -d "$TMP_DIR/kernel/ak3" >/dev/null 2>&1
-    chmod -R 755 "$TMP_DIR/kernel/ak3"
+fi
+chmod -R 755 "$TMP_DIR/kernel/ak3"
 
-    if [ -f "$TMP_DIR/kernel/ak3/anykernel.sh" ]; then
-        cd "$TMP_DIR/kernel/ak3"
-        sh anykernel.sh "$TMP_DIR/kernel/kernel.zip" 2>&1 | while IFS= read -r line; do
-            ui_print "    $line"
-        done
-        ui_print "[+] Kernel patched and flashed!"
-    fi
+if [ -f "$TMP_DIR/kernel/ak3/anykernel.sh" ]; then
+    cd "$TMP_DIR/kernel/ak3"
+    sh anykernel.sh "$TMP_DIR/kernel/kernel.zip" 2>&1 | while IFS= read -r line; do
+        ui_print "    $line"
+    done
+    ui_print "[+] Kernel patched and flashed!"
 fi
 
 # Cleanup
 ui_print " "
-ui_print "[*] Cleaning up..."
+ui_print "[*] Cleaning up temporary files..."
 rm -rf "$TMP_DIR"
 
 set_progress 1.0
