@@ -232,7 +232,7 @@ jobs:
           source "$(pwd)/scripts/QuantumRom.sh"
           EXTRACT_FIRMWARE_IMG "$FIRM_DIR/$TARGET_DEVICE" "all"
 
-      - name: Clone and Integrate Private Vendor ▶️ ${{ env.VENDOR_REPO }}
+      - name: Clone and Integrate Vendor ▶️ ${{ env.VENDOR_REPO }}
         env:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
         run: |
@@ -241,7 +241,7 @@ jobs:
           rm -rf /tmp/vendor_src
           if [ -n "$GIT_TOKEN" ]; then
             git clone --depth=1 "https://${GIT_TOKEN}@github.com/${VENDOR_REPO}.git" /tmp/vendor_src || {
-              echo "[-] Warning: Failed to clone private vendor repo, skipping custom vendor step."
+              echo "[-] Warning: Failed to clone vendor repo, skipping custom vendor step."
             }
           else
             git clone --depth=1 "https://github.com/${VENDOR_REPO}.git" /tmp/vendor_src || true
