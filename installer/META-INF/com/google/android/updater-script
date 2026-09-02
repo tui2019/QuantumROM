@@ -1,2 +1,28 @@
-# QuantumROM Updater Script (Dummy marker for recovery)
-# Execution is handled by update-binary
+ui_print(" ");
+ui_print("============================================");
+ui_print("  QuantumROM Installation");
+ui_print("  One UI 8.5 Port for Galaxy Tab S6 Lite (SM-P613)");
+ui_print("============================================");
+ui_print(" ");
+
+# ── 1. Flash boot.img ─────────────────────────────────────────────────────────
+ui_print("Flashing boot.img...");
+package_extract_file("boot.img", "/dev/block/by-name/boot");
+set_progress(0.200000);
+
+# ── 2. Flash dtbo.img (if present) ───────────────────────────────────────────
+ui_print("Flashing dtbo.img...");
+package_extract_file("dtbo.img", "/dev/block/by-name/dtbo");
+set_progress(0.250000);
+
+# ── 3. Flash super.img ────────────────────────────────────────────────────────
+ui_print("Flashing super.img (this may take a few minutes)...");
+package_extract_file("super.img", "/dev/block/by-name/super");
+set_progress(0.950000);
+
+ui_print(" ");
+ui_print("============================================");
+ui_print("  QuantumROM Flashed Successfully!");
+ui_print("  Please reboot your tablet.");
+ui_print("============================================");
+ui_print(" ");

@@ -22,43 +22,27 @@ echo "Output ZIP: $OUTPUT_ZIP_NAME"
 
 rm -rf "$BUILD_PKG_DIR"
 mkdir -p "$BUILD_PKG_DIR/META-INF/com/google/android"
-mkdir -p "$BUILD_PKG_DIR/tools"
-mkdir -p "$BUILD_PKG_DIR/images"
 
-# Copy installer scripts
+# Copy installer engine (AOSP compiled update-binary & updater-script)
 cp -f "$INSTALLER_DIR/META-INF/com/google/android/update-binary" "$BUILD_PKG_DIR/META-INF/com/google/android/"
 cp -f "$INSTALLER_DIR/META-INF/com/google/android/updater-script" "$BUILD_PKG_DIR/META-INF/com/google/android/"
 chmod +x "$BUILD_PKG_DIR/META-INF/com/google/android/update-binary"
 
-# Copy helper tools
-if [ -d "$INSTALLER_DIR/tools" ]; then
-    cp -rf "$INSTALLER_DIR/tools/." "$BUILD_PKG_DIR/tools/"
-    chmod -R 755 "$BUILD_PKG_DIR/tools" 2>/dev/null || true
-fi
-
-# Copy Partition Images
-echo "[*] Copying partition images to package..."
+# Copy super.img (Physical dynamic partition super container)
 if [ -f "$OUT_DIR/super.img" ]; then
-    echo " [+] Adding super.img ($(du -h "$OUT_DIR/super.img" | cut -f1))"
-    cp -f "$OUT_DIR/super.img" "$BUILD_PKG_DIR/images/super.img"
+    echo "[+] Adding super.img ($(du -h "$OUT_DIR/super.img" | cut -f1))"
+    cp -f "$OUT_DIR/super.img" "$BUILD_PKG_DIR/super.img"
 fi
-
-for part in system vendor product odm system_ext; do
-    if [ -f "$OUT_DIR/${part}.img" ]; then
-        echo " [+] Adding ${part}.img ($(du -h "$OUT_DIR/${part}.img" | cut -f1))"
-        cp -f "$OUT_DIR/${part}.img" "$BUILD_PKG_DIR/images/"
-    fi
-done
 
 # Copy Kernel Images (boot.img & dtbo.img)
 if [ -f "$OUT_DIR/boot.img" ]; then
     echo "[+] Adding boot.img ($(du -h "$OUT_DIR/boot.img" | cut -f1))"
-    cp -f "$OUT_DIR/boot.img" "$BUILD_PKG_DIR/images/boot.img"
+    cp -f "$OUT_DIR/boot.img" "$BUILD_PKG_DIR/boot.img"
 fi
 
 if [ -f "$OUT_DIR/dtbo.img" ]; then
     echo "[+] Adding dtbo.img ($(du -h "$OUT_DIR/dtbo.img" | cut -f1))"
-    cp -f "$OUT_DIR/dtbo.img" "$BUILD_PKG_DIR/images/dtbo.img"
+    cp -f "$OUT_DIR/dtbo.img" "$BUILD_PKG_DIR/dtbo.img"
 fi
 
 # If KERNEL_PKG_PATH was provided as a zip
@@ -69,19 +53,15 @@ if [ -n "$KERNEL_PKG_PATH" ] && [ -f "$KERNEL_PKG_PATH" ]; then
     mkdir -p "$UNPACK_K_DIR"
     unzip -oq "$KERNEL_PKG_PATH" -d "$UNPACK_K_DIR" || true
 
-    if [ -f "$UNPACK_K_DIR/boot.img" ] && [ ! -f "$BUILD_PKG_DIR/images/boot.img" ]; then
+    if [ -f "$UNPACK_K_DIR/boot.img" ] && [ ! -f "$BUILD_PKG_DIR/boot.img" ]; then
         echo "[+] Found boot.img inside kernel package."
-        cp -f "$UNPACK_K_DIR/boot.img" "$BUILD_PKG_DIR/images/boot.img"
+        cp -f "$UNPACK_K_DIR/boot.img" "$BUILD_PKG_DIR/boot.img"
     fi
 
-    if [ -f "$UNPACK_K_DIR/dtbo.img" ] && [ ! -f "$BUILD_PKG_DIR/images/dtbo.img" ]; then
+    if [ -f "$UNPACK_K_DIR/dtbo.img" ] && [ ! -f "$BUILD_PKG_DIR/dtbo.img" ]; then
         echo "[+] Found dtbo.img inside kernel package."
-        cp -f "$UNPACK_K_DIR/dtbo.img" "$BUILD_PKG_DIR/images/dtbo.img"
+        cp -f "$UNPACK_K_DIR/dtbo.img" "$BUILD_PKG_DIR/dtbo.img"
     fi
-
-    # Include kernel package for recovery fallback
-    mkdir -p "$BUILD_PKG_DIR/kernel"
-    cp -f "$KERNEL_PKG_PATH" "$BUILD_PKG_DIR/kernel/kernel.zip"
 
     rm -rf "$UNPACK_K_DIR"
 fi
@@ -89,9 +69,9 @@ fi
 FINAL_ZIP_PATH="$OUT_DIR/$OUTPUT_ZIP_NAME"
 rm -f "$FINAL_ZIP_PATH"
 
-echo "[*] Compressing into recovery flashable zip..."
+echo "[*] Compressing into recovery flashable zip (level 1 for high speed)..."
 cd "$BUILD_PKG_DIR"
-7z a -tzip "$FINAL_ZIP_PATH" ./* -mx=5
+7z a -tzip "$FINAL_ZIP_PATH" ./* -mx=1
 
 echo "============================================"
 echo " Flashable ZIP Created Successfully!"
