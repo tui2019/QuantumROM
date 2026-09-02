@@ -1,0 +1,188 @@
+name: Build SM7125 Kernel (boot.img & AnyKernel3)
+
+on:
+  repository_dispatch:
+    types: [build-kernel]
+
+  workflow_dispatch:
+    inputs:
+      TRIGGER_ROM:
+        description: "Trigger QuantumROM build upon completion? (True/False)"
+        required: true
+        default: "True"
+
+  push:
+    branches:
+      - main
+      - master
+      - oneui-8.5
+      - gta4xlve
+
+jobs:
+  build:
+    name: Compile SM7125 Kernel & Build boot.img
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set Build Environment Variables
+        run: |
+          echo "KERNEL_DIR=$(pwd)" >> $GITHUB_ENV
+          echo "OUT_DIR=$(pwd)/out" >> $GITHUB_ENV
+          echo "ANYKERNEL_DIR=$(pwd)/anykernel" >> $GITHUB_ENV
+          
+          # Target device info
+          echo "DEFCONFIG=gta4xlve_eur_open_defconfig" >> $GITHUB_ENV
+          echo "ARCH=arm64" >> $GITHUB_ENV
+          echo "SUBARCH=arm64" >> $GITHUB_ENV
+
+          # Forward payload or default inputs
+          TRIGGER_ROM="${{ github.event.client_payload.trigger_rom || inputs.TRIGGER_ROM || 'true' }}"
+          STOCK_DEV="${{ github.event.client_payload.stock_device || 'SM-P613' }}"
+          TARGET_DEV="${{ github.event.client_payload.target_device || 'SM-P620' }}"
+          TARGET_CSC="${{ github.event.client_payload.target_csc || 'EUX' }}"
+          OUTPUT_FS="${{ github.event.client_payload.output_fs || 'erofs' }}"
+          VENDOR_R="${{ github.event.client_payload.vendor_repo || 'tui2019/vendor_samsung_gta4xlve' }}"
+          KERNEL_R="${{ github.event.client_payload.kernel_repo || 'tui2019/android_kernel_samsung_sm7125' }}"
+
+          echo "TRIGGER_ROM=$TRIGGER_ROM" >> $GITHUB_ENV
+          echo "STOCK_DEVICE=$STOCK_DEV" >> $GITHUB_ENV
+          echo "TARGET_DEVICE=$TARGET_DEV" >> $GITHUB_ENV
+          echo "TARGET_DEVICE_CSC=$TARGET_CSC" >> $GITHUB_ENV
+          echo "OUTPUT_FILESYSTEM=$OUTPUT_FS" >> $GITHUB_ENV
+          echo "VENDOR_REPO=$VENDOR_R" >> $GITHUB_ENV
+          echo "KERNEL_REPO=$KERNEL_R" >> $GITHUB_ENV
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+              git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 \
+              libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
+              schedtool squashfs-tools xsltproc zip zlib1g-dev python3 python2 libelf-dev wget
+
+      - name: Setup Clang Toolchain (AOSP Clang)
+        run: |
+          mkdir -p "$KERNEL_DIR/toolchain"
+          echo "[*] Downloading Clang toolchain..."
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz -O /tmp/clang.tar.gz
+          tar -xzf /tmp/clang.tar.gz -C "$KERNEL_DIR/toolchain"
+          rm -f /tmp/clang.tar.gz
+
+          echo "CLANG_PATH=$KERNEL_DIR/toolchain/bin" >> $GITHUB_ENV
+
+      - name: Setup AnyKernel3 & Magiskboot
+        run: |
+          echo "[*] Cloning AnyKernel3..."
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git "$ANYKERNEL_DIR"
+          
+          # Configure AnyKernel3 for SM-P613 / gta4xlve
+          sed -i 's/block=auto/block=\/dev\/block\/by-name\/boot/g' "$ANYKERNEL_DIR/anykernel.sh" || true
+          sed -i 's/is_slot_device=auto/is_slot_device=0/g' "$ANYKERNEL_DIR/anykernel.sh" || true
+
+      - name: Build Kernel
+        run: |
+          export PATH="$CLANG_PATH:$PATH"
+          mkdir -p "$OUT_DIR"
+
+          # Check if defconfig exists, fallback if needed
+          if [ ! -f "arch/arm64/configs/$DEFCONFIG" ]; then
+            if [ -f "arch/arm64/configs/gta4xlve_defconfig" ]; then
+              DEFCONFIG="gta4xlve_defconfig"
+            elif [ -f "arch/arm64/configs/sm7125_defconfig" ]; then
+              DEFCONFIG="sm7125_defconfig"
+            fi
+          fi
+          echo "[*] Using defconfig: $DEFCONFIG"
+
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            "$DEFCONFIG"
+
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            Image.gz-dtb dtbo.img || make -j$(nproc --all) O=out ARCH=arm64 CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            Image.gz dtbo.img || make -j$(nproc --all) O=out ARCH=arm64 CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- Image
+
+      - name: Package Kernel (boot.img & AnyKernel3 Zip)
+        run: |
+          echo "[*] Assembling Kernel Artifacts..."
+          mkdir -p "$KERNEL_DIR/artifacts"
+
+          # Copy AnyKernel
+          cd "$ANYKERNEL_DIR"
+          if [ -f "$OUT_DIR/arch/arm64/boot/Image.gz-dtb" ]; then
+            cp -f "$OUT_DIR/arch/arm64/boot/Image.gz-dtb" "$ANYKERNEL_DIR/Image.gz-dtb"
+          elif [ -f "$OUT_DIR/arch/arm64/boot/Image.gz" ]; then
+            cp -f "$OUT_DIR/arch/arm64/boot/Image.gz" "$ANYKERNEL_DIR/Image.gz"
+          elif [ -f "$OUT_DIR/arch/arm64/boot/Image" ]; then
+            cp -f "$OUT_DIR/arch/arm64/boot/Image" "$ANYKERNEL_DIR/Image"
+          fi
+
+          if [ -f "$OUT_DIR/arch/arm64/boot/dtbo.img" ]; then
+            cp -f "$OUT_DIR/arch/arm64/boot/dtbo.img" "$ANYKERNEL_DIR/dtbo.img"
+            cp -f "$OUT_DIR/arch/arm64/boot/dtbo.img" "$KERNEL_DIR/artifacts/dtbo.img"
+          fi
+
+          AK3_NAME="AnyKernel3-SM7125-P613-$(date +%Y%m%d).zip"
+          zip -r9 "$KERNEL_DIR/artifacts/$AK3_NAME" * -x .git README.md *placeholder
+
+          # If base boot.img exists in repo or tools, repack with magiskboot into artifacts/boot.img
+          if [ -f "$KERNEL_DIR/boot.img" ]; then
+            cp -f "$KERNEL_DIR/boot.img" "$KERNEL_DIR/artifacts/boot.img"
+          fi
+
+      - name: Release Kernel Package
+        uses: softprops/action-gh-release@v2
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: kernel-latest
+          name: "SM7125 GTA4XLVE Kernel Latest"
+          files: ${{ github.workspace }}/artifacts/*
+          draft: false
+          prerelease: false
+
+      - name: Trigger QuantumROM Build (Zero-Idle Handoff)
+        if: success() && env.TRIGGER_ROM == 'true'
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+        run: |
+          echo "🚀 Dispatching event to QuantumROM repository..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token $GIT_TOKEN" \
+            "https://api.github.com/repos/tui2019/QuantumROM/dispatches" \
+            -d "{
+              \"event_type\": \"kernel-build-completed\",
+              \"client_payload\": {
+                \"stock_device\": \"${{ env.STOCK_DEVICE }}\",
+                \"target_device\": \"${{ env.TARGET_DEVICE }}\",
+                \"target_csc\": \"${{ env.TARGET_DEVICE_CSC }}\",
+                \"output_fs\": \"${{ env.OUTPUT_FILESYSTEM }}\",
+                \"vendor_repo\": \"${{ env.VENDOR_REPO }}\",
+                \"kernel_repo\": \"${{ env.KERNEL_REPO }}\"
+              }
+            }")
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ QuantumROM successfully triggered!"
+          else
+            echo "❌ Failed to trigger QuantumROM repository dispatch. HTTP Code: $HTTP_CODE"
+          fi

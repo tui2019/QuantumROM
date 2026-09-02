@@ -2806,3 +2806,85 @@ BUILD_SUPER_IMG() {
         $IMAGES \
         --output "$OUTPUT_IMG"
 }
+
+
+INTEGRATE_CUSTOM_VENDOR() {
+    echo " "
+    if [ "$#" -lt 2 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <VENDOR_SRC_DIR> <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local VENDOR_SRC_DIR="$1"
+    local EXTRACTED_FIRM_DIR="$2"
+
+    [ ! -d "$VENDOR_SRC_DIR" ] && {
+        echo "- Vendor source dir not found: $VENDOR_SRC_DIR"
+        return 0
+    }
+
+    echo "=============================================="
+    echo "   Integrating Custom Vendor (gta4xlve/sm7125) "
+    echo "=============================================="
+
+    rm -rf "${EXTRACTED_FIRM_DIR}/vendor"
+    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor"
+
+    if [ -d "$VENDOR_SRC_DIR/vendor" ]; then
+        echo "[+] Copying from $VENDOR_SRC_DIR/vendor..."
+        cp -a "$VENDOR_SRC_DIR/vendor/." "${EXTRACTED_FIRM_DIR}/vendor/"
+    else
+        echo "[+] Copying vendor root contents..."
+        cp -a "$VENDOR_SRC_DIR/." "${EXTRACTED_FIRM_DIR}/vendor/"
+        rm -rf "${EXTRACTED_FIRM_DIR}/vendor/.git"
+    fi
+
+    if [ -d "$VENDOR_SRC_DIR/odm" ]; then
+        echo "[+] Copying custom ODM..."
+        rm -rf "${EXTRACTED_FIRM_DIR}/odm"
+        mkdir -p "${EXTRACTED_FIRM_DIR}/odm"
+        cp -a "$VENDOR_SRC_DIR/odm/." "${EXTRACTED_FIRM_DIR}/odm/"
+    fi
+
+    echo "Custom vendor integration complete."
+}
+
+
+DOWNLOAD_KERNEL_PACKAGE() {
+    local KERNEL_REPO="${1:-tui2019/android_kernel_samsung_sm7125}"
+    local OUT_DIR="$2"
+    local TOKEN="${3:-}"
+
+    mkdir -p "$OUT_DIR"
+    echo "=============================================="
+    echo "     Fetching Kernel Package from Release     "
+    echo "=============================================="
+    echo "Repository: $KERNEL_REPO"
+
+    local AUTH_HEADER=""
+    [ -n "$TOKEN" ] && AUTH_HEADER="Authorization: token $TOKEN"
+
+    local LATEST_RELEASE_URL="https://api.github.com/repos/${KERNEL_REPO}/releases/latest"
+    local RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$LATEST_RELEASE_URL")
+
+    if ! echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
+        echo "[!] Checking releases list..."
+        RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "https://api.github.com/repos/${KERNEL_REPO}/releases" | jq -r '.[0]')
+    fi
+
+    if echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
+        echo "$RELEASE_JSON" | jq -r '.assets[] | "\(.name) \(.browser_download_url)"' | while read -r name url; do
+            [ -z "$name" ] || [ "$name" = "null" ] && continue
+            echo "[+] Downloading asset: $name"
+            curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$url" -o "$OUT_DIR/$name"
+        done
+
+        # Standardize names
+        [ -f "$OUT_DIR"/AnyKernel3*.zip ] && cp -f "$OUT_DIR"/AnyKernel3*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
+        [ -f "$OUT_DIR"/legion*.zip ] && cp -f "$OUT_DIR"/legion*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
+    else
+        echo "[!] Warning: No release assets found in $KERNEL_REPO"
+    fi
+}
+
+

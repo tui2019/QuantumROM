@@ -3,23 +3,23 @@ name: QuantumROM Tools.
 on:
   workflow_dispatch:
     inputs:
+      BUILD_KERNEL:
+        description: "Trigger kernel build first before building ROM? (True/False)"
+        required: true
+        default: "True"
+
       STOCK_DEVICE:
-        description: "STOCK_DEVICE_MODEL or None"
+        description: "STOCK_DEVICE_MODEL (e.g. SM-P613)"
         required: true
         default: "SM-P613"
 
-      USE_UI_8_TETHERING_APEX:
-        description: "Set True if your kernel BPF version is 5.4 (lower than 5.10)."
-        required: true
-        default: "False"
-
       TARGET_DEVICE:
-        description: "TARGET_DEVICE_MODEL."
+        description: "TARGET_DEVICE_MODEL (e.g. SM-P620)"
         required: true
         default: "SM-P620"
 
       TARGET_DEVICE_CSC:
-        description: "TARGET_DEVICE_CSC."
+        description: "TARGET_DEVICE_CSC"
         required: true
         default: "EUX"
 
@@ -27,13 +27,23 @@ on:
         description: "Specific Samsung firmware version (PDA/CSC/MODEM) OR (AP/CSC/CP)"
         required: false
 
+      VENDOR_REPO:
+        description: "Custom Vendor repository (owner/repo)"
+        required: false
+        default: "tui2019/vendor_samsung_gta4xlve"
+
+      KERNEL_REPO:
+        description: "Kernel repository (owner/repo)"
+        required: false
+        default: "tui2019/android_kernel_samsung_sm7125"
+
       OUTPUT_FILESYSTEM:
-        description: "OUTPUT_FILESYSTEM. e.g erofs / ext4 / f2fs"
+        description: "OUTPUT_FILESYSTEM (erofs / ext4 / f2fs)"
         required: true
         default: "erofs"
 
       COMPRESS_IMG_TO_XZ:
-        description: "Compress IMG to XZ (True/False)"
+        description: "Compress raw images inside ZIP (True/False)"
         required: true
         default: "False"
 
@@ -41,6 +51,11 @@ on:
         description: "Debloat downloaded rom (True/False)"
         required: true
         default: "True"
+
+      USE_UI_8_TETHERING_APEX:
+        description: "Set True if your kernel BPF version is 5.4 (lower than 5.10)."
+        required: true
+        default: "False"
 
       ADD_CHINA_SMART_MANAGER:
         description: "Add china smart manager (True/False)"
@@ -72,14 +87,54 @@ on:
         required: true
         default: "True"
 
+  repository_dispatch:
+    types: [kernel-build-completed]
 
 jobs:
-  build:
-    name: Start QuantumROM Tools
+  trigger_kernel:
+    name: Dispatch Kernel Build (Zero-Idle)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.BUILD_KERNEL == 'True'
+    steps:
+      - name: Trigger Kernel Workflow
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+        run: |
+          KERNEL_TARGET_REPO="${{ inputs.KERNEL_REPO }}"
+          echo "🚀 Sending build request to kernel repo: $KERNEL_TARGET_REPO"
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token $GIT_TOKEN" \
+            "https://api.github.com/repos/$KERNEL_TARGET_REPO/dispatches" \
+            -d "{
+              \"event_type\": \"build-kernel\",
+              \"client_payload\": {
+                \"trigger_rom\": \"true\",
+                \"stock_device\": \"${{ inputs.STOCK_DEVICE }}\",
+                \"target_device\": \"${{ inputs.TARGET_DEVICE }}\",
+                \"target_csc\": \"${{ inputs.TARGET_DEVICE_CSC }}\",
+                \"output_fs\": \"${{ inputs.OUTPUT_FILESYSTEM }}\",
+                \"vendor_repo\": \"${{ inputs.VENDOR_REPO }}\",
+                \"kernel_repo\": \"${{ inputs.KERNEL_REPO }}\"
+              }
+            }")
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Successfully dispatched kernel build! Current VM shutting down to save compute minutes."
+          else
+            echo "❌ Failed to trigger kernel repository dispatch. HTTP Code: $HTTP_CODE"
+            echo "Please check if GIT_TOKEN has 'repo' scope and write permissions."
+            exit 1
+          fi
+
+  build_rom:
+    name: Build Recovery Flashable ROM
     runs-on: ubuntu-22.04
+    if: github.event_name == 'repository_dispatch' || (github.event_name == 'workflow_dispatch' && inputs.BUILD_KERNEL == 'False')
 
     steps:
-      - name: Checkout repository.
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set variables
@@ -91,24 +146,33 @@ jobs:
           echo "APKTOOL=$(pwd)/bin/java/apktool.jar" | tee -a "$GITHUB_ENV"
           echo "VNDKS_COLLECTION=$(pwd)/QuantumROM/vndks" | tee -a "$GITHUB_ENV"
 
-          echo "STOCK_DEVICE=${{ inputs.STOCK_DEVICE }}" | tee -a "$GITHUB_ENV"
-          echo "TARGET_DEVICE=${{ inputs.TARGET_DEVICE }}" | tee -a "$GITHUB_ENV"
-          echo "TARGET_DEVICE_CSC=${{ inputs.TARGET_DEVICE_CSC }}" | tee -a "$GITHUB_ENV"
+          STOCK_DEV="${{ inputs.STOCK_DEVICE || github.event.client_payload.stock_device || 'SM-P613' }}"
+          TARGET_DEV="${{ inputs.TARGET_DEVICE || github.event.client_payload.target_device || 'SM-P620' }}"
+          TARGET_CSC="${{ inputs.TARGET_DEVICE_CSC || github.event.client_payload.target_csc || 'EUX' }}"
+          OUTPUT_FS="${{ inputs.OUTPUT_FILESYSTEM || github.event.client_payload.output_fs || 'erofs' }}"
+          VENDOR_R="${{ inputs.VENDOR_REPO || github.event.client_payload.vendor_repo || 'tui2019/vendor_samsung_gta4xlve' }}"
+          KERNEL_R="${{ inputs.KERNEL_REPO || github.event.client_payload.kernel_repo || 'tui2019/android_kernel_samsung_sm7125' }}"
+
+          echo "STOCK_DEVICE=$STOCK_DEV" | tee -a "$GITHUB_ENV"
+          echo "TARGET_DEVICE=$TARGET_DEV" | tee -a "$GITHUB_ENV"
+          echo "TARGET_DEVICE_CSC=$TARGET_CSC" | tee -a "$GITHUB_ENV"
           echo "TARGET_FW_VERSION=${{ inputs.TARGET_FW_VERSION }}" | tee -a "$GITHUB_ENV"
+          echo "VENDOR_REPO=$VENDOR_R" | tee -a "$GITHUB_ENV"
+          echo "KERNEL_REPO=$KERNEL_R" | tee -a "$GITHUB_ENV"
 
-          echo "DEBLOAT_ROM=${{ inputs.DEBLOAT_ROM }}" | tee -a "$GITHUB_ENV"
-          echo "USE_UI_8_TETHERING_APEX=${{ inputs.USE_UI_8_TETHERING_APEX }}" | tee -a "$GITHUB_ENV"
-          echo "ADD_CHINA_SMART_MANAGER=${{ inputs.ADD_CHINA_SMART_MANAGER }}" | tee -a "$GITHUB_ENV"
-          echo "ADD_SAMSUNG_FLAGSHIP_APPS=${{ inputs.ADD_SAMSUNG_FLAGSHIP_APPS }}" | tee -a "$GITHUB_ENV"
-          echo "ADD_CUSTOM_FEATURES=${{ inputs.ADD_CUSTOM_FEATURES }}" | tee -a "$GITHUB_ENV"
-          echo "PATCH_FLAG_SECURE=${{ inputs.PATCH_FLAG_SECURE }}" | tee -a "$GITHUB_ENV"
-          echo "PATCH_SECURE_FOLDER=${{ inputs.PATCH_SECURE_FOLDER }}" | tee -a "$GITHUB_ENV"
-          echo "PATCH_BLUETOOTH_LIBRARY=${{ inputs.PATCH_BLUETOOTH_LIBRARY }}" | tee -a "$GITHUB_ENV"
+          echo "DEBLOAT_ROM=${{ inputs.DEBLOAT_ROM || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "USE_UI_8_TETHERING_APEX=${{ inputs.USE_UI_8_TETHERING_APEX || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "ADD_CHINA_SMART_MANAGER=${{ inputs.ADD_CHINA_SMART_MANAGER || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "ADD_SAMSUNG_FLAGSHIP_APPS=${{ inputs.ADD_SAMSUNG_FLAGSHIP_APPS || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "ADD_CUSTOM_FEATURES=${{ inputs.ADD_CUSTOM_FEATURES || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "PATCH_FLAG_SECURE=${{ inputs.PATCH_FLAG_SECURE || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "PATCH_SECURE_FOLDER=${{ inputs.PATCH_SECURE_FOLDER || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "PATCH_BLUETOOTH_LIBRARY=${{ inputs.PATCH_BLUETOOTH_LIBRARY || 'True' }}" | tee -a "$GITHUB_ENV"
 
-          echo "OUTPUT_FILESYSTEM=${{ inputs.OUTPUT_FILESYSTEM }}" | tee -a "$GITHUB_ENV"
-          echo "COMPRESS_IMG_TO_XZ=${{ inputs.COMPRESS_IMG_TO_XZ }}" | tee -a "$GITHUB_ENV"
- 
-      - name: Validate STOCK_DEVICE - ${{ inputs.STOCK_DEVICE }}
+          echo "OUTPUT_FILESYSTEM=$OUTPUT_FS" | tee -a "$GITHUB_ENV"
+          echo "COMPRESS_IMG_TO_XZ=${{ inputs.COMPRESS_IMG_TO_XZ || 'False' }}" | tee -a "$GITHUB_ENV"
+
+      - name: Validate STOCK_DEVICE - ${{ env.STOCK_DEVICE }}
         run: |
           REPO="SN-Abdullah-Al-Noman/QuantumROM"
           BRANCH="Devices"
@@ -116,18 +180,17 @@ jobs:
           source "$(pwd)/scripts/git_utils.sh"
 
           if [ "$STOCK_DEVICE" != "None" ]; then
-              if ! curl -fsSL -H "Accept: application/vnd.github+json" \
+              if [ -f "$(pwd)/QuantumROM/Devices/${STOCK_DEVICE}.zip" ]; then
+                  echo "✅ Local device package found: ${STOCK_DEVICE}.zip"
+                  unzip -oq "$(pwd)/QuantumROM/Devices/${STOCK_DEVICE}.zip" -d "$(pwd)/QuantumROM/Devices/$STOCK_DEVICE" || true
+              elif curl -fsSL -H "Accept: application/vnd.github+json" \
                   "https://api.github.com/repos/$REPO/contents/$STOCK_DEVICE?ref=$BRANCH" >/dev/null; then
-
-                echo "❌ Unsupported: Device '$STOCK_DEVICE' not found in $REPO/$BRANCH"
-                exit 1
+                  echo "✅ Device supported upstream: $STOCK_DEVICE"
+                  GIT_SPARSE_DOWNLOAD "$REPO" "$BRANCH" "$STOCK_DEVICE" \
+                      "$(pwd)/QuantumROM/Devices/$STOCK_DEVICE"
+              else
+                  echo "ℹ️ Using local stock device configs."
               fi
-
-              echo "✅ Device supported: $STOCK_DEVICE"
-              GIT_SPARSE_DOWNLOAD "SN-Abdullah-Al-Noman/QuantumROM" "Devices" "$STOCK_DEVICE" \
-                  "$(pwd)/QuantumROM/Devices/$STOCK_DEVICE"
-          else
-              echo "ℹ️ STOCK_DEVICE is set to None."
           fi
 
       - name: Check disk space
@@ -137,11 +200,11 @@ jobs:
           echo "Free space: ${FREE_GB} GB"
           echo "enough=$([ "$FREE_GB" -ge 50 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
-      - name: Remove unnecessary files.
+      - name: Remove unnecessary files
         if: steps.disk.outputs.enough == 'false'
         uses: rokibhasansagar/slimhub_actions@v25.42.5
 
-      - name: Install Dependencies.
+      - name: Install Dependencies
         run: |
           sudo apt update
           sudo apt install -y p7zip-full lz4 liblz4-1 liblz4-dev libzstd1 libzstd-dev build-essential android-sdk-libsparse-utils \
@@ -149,7 +212,7 @@ jobs:
           sudo modprobe f2fs || true
           mkdir -p FW WORK OUT
 
-      - name: Download firmware ▶️ ${{ inputs.TARGET_DEVICE }} - ${{ inputs.TARGET_DEVICE_CSC }}
+      - name: Download firmware ▶️ ${{ env.TARGET_DEVICE }} - ${{ env.TARGET_DEVICE_CSC }}
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
           DOWNLOAD_FIRMWARE "$TARGET_DEVICE" "$TARGET_DEVICE_CSC" "$FIRM_DIR" "$TARGET_FW_VERSION"
@@ -169,12 +232,38 @@ jobs:
           source "$(pwd)/scripts/QuantumRom.sh"
           EXTRACT_FIRMWARE_IMG "$FIRM_DIR/$TARGET_DEVICE" "all"
 
+      - name: Clone and Integrate Private Vendor ▶️ ${{ env.VENDOR_REPO }}
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+        run: |
+          source "$(pwd)/scripts/QuantumRom.sh"
+          echo "Cloning vendor repository: $VENDOR_REPO..."
+          rm -rf /tmp/vendor_src
+          if [ -n "$GIT_TOKEN" ]; then
+            git clone --depth=1 "https://${GIT_TOKEN}@github.com/${VENDOR_REPO}.git" /tmp/vendor_src || {
+              echo "[-] Warning: Failed to clone private vendor repo, skipping custom vendor step."
+            }
+          else
+            git clone --depth=1 "https://github.com/${VENDOR_REPO}.git" /tmp/vendor_src || true
+          fi
+
+          if [ -d /tmp/vendor_src ]; then
+            INTEGRATE_CUSTOM_VENDOR "/tmp/vendor_src" "$FIRM_DIR/$TARGET_DEVICE"
+          fi
+
+      - name: Fetch Kernel Package ▶️ ${{ env.KERNEL_REPO }}
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+        run: |
+          source "$(pwd)/scripts/QuantumRom.sh"
+          DOWNLOAD_KERNEL_PACKAGE "$KERNEL_REPO" "$OUT_DIR" "$GIT_TOKEN"
+
       - name: Decode odm, omc
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
           DECODE_OMC "$FIRM_DIR/$TARGET_DEVICE" "$OUT_DIR"
 
-      - name: Debloat Rom - ${{ inputs.DEBLOAT_ROM }}
+      - name: Debloat Rom - ${{ env.DEBLOAT_ROM }}
         run: |
           source "$(pwd)/scripts/debloat.sh"
           source "$(pwd)/scripts/QuantumRom.sh"
@@ -190,13 +279,15 @@ jobs:
 
           if [ "$STOCK_DEVICE" != "None" ]; then
               APPLY_STOCK_CONFIG "$STOCK_DEVICE" "$FIRM_DIR/$TARGET_DEVICE"
-              DECOMPILE "$APKTOOL" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework/ssrm.jar" "$WORK_DIR"
-              PATCH_SSRM "$WORK_DIR/ssrm"
-              RECOMPILE "$APKTOOL" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework" "$WORK_DIR/ssrm" "$WORK_DIR"
-              mv -f "$WORK_DIR/ssrm.jar" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework/"
+              if [ -f "$FIRM_DIR/$TARGET_DEVICE/system/system/framework/ssrm.jar" ]; then
+                  DECOMPILE "$APKTOOL" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework/ssrm.jar" "$WORK_DIR"
+                  PATCH_SSRM "$WORK_DIR/ssrm"
+                  RECOMPILE "$APKTOOL" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework" "$WORK_DIR/ssrm" "$WORK_DIR"
+                  mv -f "$WORK_DIR/ssrm.jar" "$FIRM_DIR/$TARGET_DEVICE/system/system/framework/"
+              fi
           fi
 
-      - name: Add china smart manager - ${{ inputs.ADD_CHINA_SMART_MANAGER }}
+      - name: Add china smart manager - ${{ env.ADD_CHINA_SMART_MANAGER }}
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
 
@@ -204,7 +295,7 @@ jobs:
               ADD_CHINA_SMART_MANAGER "$FIRM_DIR/$TARGET_DEVICE"
           fi
 
-      - name: Add samsung flagship apps - ${{ inputs.ADD_SAMSUNG_FLAGSHIP_APPS }}
+      - name: Add samsung flagship apps - ${{ env.ADD_SAMSUNG_FLAGSHIP_APPS }}
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
 
@@ -212,7 +303,7 @@ jobs:
               ADD_SAMSUNG_FLAGSHIP_APPS "$FIRM_DIR/$TARGET_DEVICE"
           fi
 
-      - name: Add custom features - ${{ inputs.ADD_CUSTOM_FEATURES }}
+      - name: Add custom features - ${{ env.ADD_CUSTOM_FEATURES }}
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
 
@@ -220,7 +311,7 @@ jobs:
               APPLY_CUSTOM_FEATURES "$FIRM_DIR/$TARGET_DEVICE"
           fi
 
-      - name: Patch flag secure and secure folder - ${{ inputs.PATCH_FLAG_SECURE }} - ${{ inputs.PATCH_SECURE_FOLDER }}
+      - name: Patch flag secure and secure folder - ${{ env.PATCH_FLAG_SECURE }} - ${{ env.PATCH_SECURE_FOLDER }}
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
 
@@ -246,7 +337,7 @@ jobs:
               echo "✅ services.jar moved to rom."
           fi
 
-      - name: Patch bluetooth library- ${{ inputs.PATCH_BLUETOOTH_LIBRARY }}
+      - name: Patch bluetooth library - ${{ env.PATCH_BLUETOOTH_LIBRARY }}
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
 
@@ -257,39 +348,23 @@ jobs:
       - name: Apply others features and patch
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
-          trap 'echo "ERROR: line=${LINENO} file=${BASH_SOURCE[0]} command=${BASH_COMMAND}"; echo "FUNCNAME: ${FUNCNAME[*]}"' ERR
-          PS4='+ ${BASH_SOURCE}:${LINENO}: '
-          set -x
           PATCH_SELINUX "$FIRM_DIR/$TARGET_DEVICE"
           DISABLE_SECURITY "$FIRM_DIR/$TARGET_DEVICE"
-          set +x
 
-      - name: Build img - ${{ inputs.OUTPUT_FILESYSTEM }}
+      - name: Build img - ${{ env.OUTPUT_FILESYSTEM }}
         run: |
           source "$(pwd)/scripts/QuantumRom.sh"
           BUILD_IMG "$FIRM_DIR/$TARGET_DEVICE" "all" "$OUTPUT_FILESYSTEM" "$OUT_DIR"
 
-      - name: Compress all .img & make zip file before upload - - ${{ inputs.COMPRESS_IMG_TO_XZ }}
+      - name: Package Recovery Flashable ZIP
         run: |
           echo "BUILD_TIME=$(TZ='Asia/Dhaka' date '+%Y-%m-%d %I:%M:%S %p UTC+6')" | tee -a "$GITHUB_ENV"
-          ZIP_NAME="${{ inputs.TARGET_DEVICE }}_Port_For_${{ inputs.STOCK_DEVICE }}.zip"
-          ZIP_PATH="$OUT_DIR/$ZIP_NAME"
+          ZIP_NAME="${TARGET_DEVICE}_Port_For_${STOCK_DEVICE}_Recovery.zip"
+          bash scripts/make_flashable_zip.sh "$OUT_DIR" "$TARGET_DEVICE" "$STOCK_DEVICE" "$OUT_DIR/kernel.zip" "$ZIP_NAME"
+          echo "ZIP_PATH=$OUT_DIR/$ZIP_NAME" | tee -a "$GITHUB_ENV"
 
-          if [ "$COMPRESS_IMG_TO_XZ" = "True" ]; then
-              echo "Compressing all .img files to .xz (level 9)..."
-              for img in "$OUT_DIR"/*.img; do
-                  [ -f "$img" ] || continue
-                  echo "Compressing $img"
-                  xz -9 -T0 "$img"
-              done
-          fi
-
-          echo "Creating zip: $ZIP_NAME"
-          7z a -tzip "$ZIP_PATH" "$OUT_DIR"/* -mx=5
-          echo "ZIP_PATH=$ZIP_PATH" | tee -a "$GITHUB_ENV"
-
-      - name: Upload file in GoFile & Create Release.
+      - name: Upload file in GoFile & Create Release
         env:
-          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
         run: |
           bash release.sh

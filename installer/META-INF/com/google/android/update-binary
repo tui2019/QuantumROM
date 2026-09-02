@@ -1,0 +1,194 @@
+#!/sbin/sh
+#
+# QuantumROM Recovery Flashable Installer for Samsung Galaxy Tab S6 Lite (SM-P613 / gta4xlve)
+#
+
+OUTFD="/proc/self/fd/$2"
+ZIPFILE="$3"
+
+ui_print() {
+    echo "ui_print $1" > "$OUTFD"
+    echo "ui_print" > "$OUTFD"
+}
+
+set_progress() {
+    echo "set_progress $1" > "$OUTFD"
+}
+
+ui_print "============================================"
+ui_print "          QuantumROM OS Installer           "
+ui_print "    One UI 8.5 Port for Galaxy Tab S6 Lite  "
+ui_print "============================================"
+ui_print " "
+
+TMP_DIR="/tmp/quantum_installer"
+rm -rf "$TMP_DIR"
+mkdir -p "$TMP_DIR"
+mkdir -p "$TMP_DIR/tools"
+mkdir -p "$TMP_DIR/images"
+
+set_progress 0.05
+
+# Verify device
+DEVICE=$(getprop ro.product.device)
+[ -z "$DEVICE" ] && DEVICE=$(getprop ro.build.product)
+MODEL=$(getprop ro.product.model)
+
+ui_print "[*] Target Device: $MODEL ($DEVICE)"
+
+case "$DEVICE" in
+    *gta4xlve*|*gta4xl*|*p613*|*P613*|*p619*|*P619*)
+        ui_print "[+] Supported device detected!"
+        ;;
+    *)
+        ui_print "[!] Warning: Unknown device code ($DEVICE), proceeding with caution..."
+        ;;
+esac
+
+ui_print " "
+ui_print "[*] Extracting installer tools..."
+unzip -o "$ZIPFILE" "tools/*" -d "$TMP_DIR" >/dev/null 2>&1
+chmod -R 755 "$TMP_DIR/tools"
+
+LPTOOLS="$TMP_DIR/tools/lptools"
+[ ! -f "$LPTOOLS" ] && LPTOOLS="$TMP_DIR/tools/lptools_static"
+[ ! -f "$LPTOOLS" ] && LPTOOLS="/sbin/lptools"
+
+# Unmount existing partitions to prevent busy errors
+ui_print "[*] Unmounting existing partitions..."
+umount /system /system_root /vendor /product /odm /system_ext 2>/dev/null || true
+
+# Dynamic partition helper
+SUPER_DEV="/dev/block/by-name/super"
+[ ! -e "$SUPER_DEV" ] && SUPER_DEV="/dev/block/bootdevice/by-name/super"
+
+if [ -e "$SUPER_DEV" ]; then
+    ui_print "[+] Found dynamic super partition: $SUPER_DEV"
+fi
+
+flash_partition() {
+    local PART="$1"
+    local IMG_FILE="$TMP_DIR/images/${PART}.img"
+    local BLOCK_DEV=""
+
+    ui_print "[*] Extracting ${PART}.img from ZIP..."
+    unzip -o "$ZIPFILE" "images/${PART}.img" -d "$TMP_DIR" >/dev/null 2>&1
+
+    if [ ! -f "$IMG_FILE" ]; then
+        ui_print "[-] ${PART}.img not present in zip, skipping."
+        return 0
+    fi
+
+    local IMG_SIZE=$(wc -c < "$IMG_FILE")
+    ui_print "[*] Flashing $PART ($(( IMG_SIZE / 1024 / 1024 )) MB)..."
+
+    # Find or create mapper block device
+    if [ -e "/dev/block/mapper/$PART" ]; then
+        BLOCK_DEV="/dev/block/mapper/$PART"
+    elif [ -e "/dev/block/by-name/$PART" ]; then
+        BLOCK_DEV="/dev/block/by-name/$PART"
+    elif [ -e "/dev/block/bootdevice/by-name/$PART" ]; then
+        BLOCK_DEV="/dev/block/bootdevice/by-name/$PART"
+    fi
+
+    # If lptools is available and dynamic super exists, resize/map partition if needed
+    if [ -x "$LPTOOLS" ] && [ -e "$SUPER_DEV" ]; then
+        ui_print "    Resizing logical partition $PART with lptools..."
+        "$LPTOOLS" resize "$PART" "$IMG_SIZE" 2>/dev/null || true
+        "$LPTOOLS" map "$PART" 2>/dev/null || true
+    fi
+
+    [ -e "/dev/block/mapper/$PART" ] && BLOCK_DEV="/dev/block/mapper/$PART"
+
+    if [ -n "$BLOCK_DEV" ] && [ -e "$BLOCK_DEV" ]; then
+        ui_print "    Writing to $BLOCK_DEV..."
+        dd if="$IMG_FILE" of="$BLOCK_DEV" bs=4M 2>/dev/null || dd if="$IMG_FILE" of="$BLOCK_DEV" bs=1M
+        ui_print "[+] Successfully flashed $PART!"
+    else
+        ui_print "[!] Error: Target block device for $PART not found!"
+    fi
+
+    rm -f "$IMG_FILE"
+}
+
+set_progress 0.15
+flash_partition "system"
+
+set_progress 0.40
+flash_partition "vendor"
+
+set_progress 0.60
+flash_partition "product"
+
+set_progress 0.75
+flash_partition "odm"
+
+if unzip -l "$ZIPFILE" | grep -q "images/system_ext.img"; then
+    flash_partition "system_ext"
+fi
+
+set_progress 0.85
+
+# Flash Kernel (boot.img & dtbo.img)
+ui_print " "
+ui_print "============================================"
+ui_print "       Flashing Kernel & DTBO Images        "
+ui_print "============================================"
+
+unzip -o "$ZIPFILE" "images/boot.img" "images/dtbo.img" -d "$TMP_DIR" >/dev/null 2>&1
+
+if [ -f "$TMP_DIR/images/boot.img" ]; then
+    BOOT_DEV="/dev/block/by-name/boot"
+    [ ! -e "$BOOT_DEV" ] && BOOT_DEV="/dev/block/bootdevice/by-name/boot"
+    if [ -e "$BOOT_DEV" ]; then
+        ui_print "[*] Flashing boot.img to $BOOT_DEV..."
+        dd if="$TMP_DIR/images/boot.img" of="$BOOT_DEV" bs=4M
+        ui_print "[+] boot.img flashed successfully!"
+    else
+        ui_print "[!] Error: boot block device not found!"
+    fi
+    rm -f "$TMP_DIR/images/boot.img"
+fi
+
+if [ -f "$TMP_DIR/images/dtbo.img" ]; then
+    DTBO_DEV="/dev/block/by-name/dtbo"
+    [ ! -e "$DTBO_DEV" ] && DTBO_DEV="/dev/block/bootdevice/by-name/dtbo"
+    if [ -e "$DTBO_DEV" ]; then
+        ui_print "[*] Flashing dtbo.img to $DTBO_DEV..."
+        dd if="$TMP_DIR/images/dtbo.img" of="$DTBO_DEV" bs=4M
+        ui_print "[+] dtbo.img flashed successfully!"
+    fi
+    rm -f "$TMP_DIR/images/dtbo.img"
+fi
+
+# Fallback check for AnyKernel3 zip if boot.img was not directly provided
+if unzip -l "$ZIPFILE" | grep -q "kernel/kernel.zip"; then
+    ui_print "[*] Found AnyKernel package fallback, executing..."
+    mkdir -p "$TMP_DIR/kernel"
+    unzip -o "$ZIPFILE" "kernel/kernel.zip" -d "$TMP_DIR" >/dev/null 2>&1
+    mkdir -p "$TMP_DIR/kernel/ak3"
+    unzip -o "$TMP_DIR/kernel/kernel.zip" -d "$TMP_DIR/kernel/ak3" >/dev/null 2>&1
+    chmod -R 755 "$TMP_DIR/kernel/ak3"
+    if [ -f "$TMP_DIR/kernel/ak3/anykernel.sh" ]; then
+        cd "$TMP_DIR/kernel/ak3"
+        sh anykernel.sh "$TMP_DIR/kernel/kernel.zip" 2>&1 | while IFS= read -r line; do
+            ui_print "    $line"
+        done
+    fi
+fi
+
+# Cleanup
+ui_print " "
+ui_print "[*] Cleaning up temporary files..."
+rm -rf "$TMP_DIR"
+
+set_progress 1.0
+
+ui_print " "
+ui_print "============================================"
+ui_print "        QuantumROM Flashed Successfully!    "
+ui_print "          Please reboot your tablet!        "
+ui_print "============================================"
+ui_print " "
+
+exit 0
