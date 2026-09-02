@@ -1,0 +1,17 @@
+[
+  {
+    "datetime": 1787961906,
+    "version": "23.2",
+    "type": "unofficial",
+    "files": [
+      {
+        "filename": "QuantumROM_SM-P620_Port_For_SM-P613_Recovery.zip",
+        "url": "https://downloads.sourceforge.net/project/quantumrom/SM-P613/QuantumROM_SM-P620_Port_For_SM-P613_Recovery.zip",
+        "size": 3755889929,
+        "sha256": "fce288523f87c7ab6763dd8c2db9f067a6933bf9605a2ff9d1ed36caf0f64dcf",
+        "os_patch_level": "2026-08-01",
+        "os_sdk_level": 36
+      }
+    ]
+  }
+]

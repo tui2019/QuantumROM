@@ -66,12 +66,42 @@ if [ -n "$KERNEL_PKG_PATH" ] && [ -f "$KERNEL_PKG_PATH" ]; then
     rm -rf "$UNPACK_K_DIR"
 fi
 
+# Copy Android OTA package metadata
+if [ -d "$QT_DIR/ota" ]; then
+    echo "[+] Adding Android OTA metadata..."
+    mkdir -p "$BUILD_PKG_DIR/META-INF/com/android"
+    [ -f "$QT_DIR/ota/metadata" ] && cp -f "$QT_DIR/ota/metadata" "$BUILD_PKG_DIR/META-INF/com/android/metadata"
+    [ -f "$QT_DIR/ota/metadata.pb" ] && cp -f "$QT_DIR/ota/metadata.pb" "$BUILD_PKG_DIR/META-INF/com/android/metadata.pb"
+fi
+
 FINAL_ZIP_PATH="$OUT_DIR/$OUTPUT_ZIP_NAME"
 rm -f "$FINAL_ZIP_PATH"
 
 echo "[*] Compressing into recovery flashable zip (level 1 for high speed)..."
 cd "$BUILD_PKG_DIR"
 7z a -tzip "$FINAL_ZIP_PATH" ./* -mx=1
+
+OTA_CERT="$QT_DIR/ota_keys/ota_key.x509.pem"
+OTA_KEY="$QT_DIR/ota_keys/ota_key.pk8"
+SIGNAPK_BIN="$QT_DIR/bin/signapk/signapk"
+
+# If private key was passed via environment variable (e.g. GitHub Actions secret)
+if [ ! -f "$OTA_KEY" ] && [ -n "${OTA_KEY_BASE64:-}" ]; then
+    mkdir -p "$QT_DIR/ota_keys"
+    echo "$OTA_KEY_BASE64" | base64 -d > "$QT_DIR/ota_keys/ota_key.pk8"
+    chmod 600 "$QT_DIR/ota_keys/ota_key.pk8"
+    OTA_KEY="$QT_DIR/ota_keys/ota_key.pk8"
+fi
+
+if [ -f "$OTA_CERT" ] && [ -f "$OTA_KEY" ] && [ -x "$SIGNAPK_BIN" ]; then
+    echo "[*] Signing recovery zip with OTA key (whole-file signature)..."
+    SIGNED_ZIP_PATH="${FINAL_ZIP_PATH%.zip}_signed.zip"
+    "$SIGNAPK_BIN" -w "$OTA_CERT" "$OTA_KEY" "$FINAL_ZIP_PATH" "$SIGNED_ZIP_PATH"
+    if [ -f "$SIGNED_ZIP_PATH" ]; then
+        mv -f "$SIGNED_ZIP_PATH" "$FINAL_ZIP_PATH"
+        echo "[+] Successfully signed recovery package!"
+    fi
+fi
 
 echo "============================================"
 echo " Flashable ZIP Created Successfully!"

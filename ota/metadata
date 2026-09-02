@@ -1,0 +1,9 @@
+ota-property-files=metadata:69:347,metadata.pb:484:233                 
+ota-required-cache=0
+ota-type=BLOCK
+post-build=samsung/QuantumROM_SM-P613/gta4xlve:16/BP4A.251205.006:user/release-keys
+post-build-incremental=1
+post-sdk-level=36
+post-security-patch-level=2026-08-01
+post-timestamp=1787961906
+pre-device=SM-P613,gta4xlve,gta4xlwifi

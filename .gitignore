@@ -1,3 +1,9 @@
 *Zone.Identifier*
 __pycache__/
 *.pyc
+# OTA Signing Keys (Private keys must never be committed)
+ota_keys/*.pk8
+*.pk8
+.DS_Store
+*/.DS_Store
+QuantumROM-P613-CameraFix.zip
