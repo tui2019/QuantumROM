@@ -30,18 +30,10 @@ cp -f "$INSTALLER_DIR/META-INF/com/google/android/update-binary" "$BUILD_PKG_DIR
 cp -f "$INSTALLER_DIR/META-INF/com/google/android/updater-script" "$BUILD_PKG_DIR/META-INF/com/google/android/"
 chmod +x "$BUILD_PKG_DIR/META-INF/com/google/android/update-binary"
 
-# Setup tools (lptools)
-if [ ! -f "$INSTALLER_DIR/tools/lptools" ]; then
-    echo "[*] Downloading static arm64 lptools..."
-    mkdir -p "$INSTALLER_DIR/tools"
-    wget -q --no-check-certificate \
-        "https://raw.githubusercontent.com/osm0sis/AnyKernel3/master/tools/lptools" \
-        -O "$INSTALLER_DIR/tools/lptools" || true
-    chmod +x "$INSTALLER_DIR/tools/lptools" 2>/dev/null || true
-fi
-
-if [ -f "$INSTALLER_DIR/tools/lptools" ]; then
-    cp -f "$INSTALLER_DIR/tools/lptools" "$BUILD_PKG_DIR/tools/"
+# Copy helper tools
+if [ -d "$INSTALLER_DIR/tools" ]; then
+    cp -rf "$INSTALLER_DIR/tools/." "$BUILD_PKG_DIR/tools/"
+    chmod -R 755 "$BUILD_PKG_DIR/tools" 2>/dev/null || true
 fi
 
 # Copy Partition Images
@@ -64,30 +56,27 @@ if [ -f "$OUT_DIR/dtbo.img" ]; then
     cp -f "$OUT_DIR/dtbo.img" "$BUILD_PKG_DIR/images/dtbo.img"
 fi
 
-# If KERNEL_PKG_PATH was provided as a zip and boot.img was not in OUT_DIR
-if [ ! -f "$BUILD_PKG_DIR/images/boot.img" ] && [ -n "$KERNEL_PKG_PATH" ] && [ -f "$KERNEL_PKG_PATH" ]; then
-    echo "[*] Extracting kernel package: $KERNEL_PKG_PATH"
+# If KERNEL_PKG_PATH was provided as a zip
+if [ -n "$KERNEL_PKG_PATH" ] && [ -f "$KERNEL_PKG_PATH" ]; then
+    echo "[*] Handling kernel package: $KERNEL_PKG_PATH"
     UNPACK_K_DIR="$OUT_DIR/kernel_unpack_tmp"
     rm -rf "$UNPACK_K_DIR"
     mkdir -p "$UNPACK_K_DIR"
     unzip -oq "$KERNEL_PKG_PATH" -d "$UNPACK_K_DIR" || true
 
-    if [ -f "$UNPACK_K_DIR/boot.img" ]; then
+    if [ -f "$UNPACK_K_DIR/boot.img" ] && [ ! -f "$BUILD_PKG_DIR/images/boot.img" ]; then
         echo "[+] Found boot.img inside kernel package."
         cp -f "$UNPACK_K_DIR/boot.img" "$BUILD_PKG_DIR/images/boot.img"
     fi
 
-    if [ -f "$UNPACK_K_DIR/dtbo.img" ]; then
+    if [ -f "$UNPACK_K_DIR/dtbo.img" ] && [ ! -f "$BUILD_PKG_DIR/images/dtbo.img" ]; then
         echo "[+] Found dtbo.img inside kernel package."
         cp -f "$UNPACK_K_DIR/dtbo.img" "$BUILD_PKG_DIR/images/dtbo.img"
     fi
 
-    # Fallback to store AnyKernel if boot.img wasn't pre-packed
-    if [ ! -f "$BUILD_PKG_DIR/images/boot.img" ]; then
-        echo "[!] Note: Storing AnyKernel package as fallback."
-        mkdir -p "$BUILD_PKG_DIR/kernel"
-        cp -f "$KERNEL_PKG_PATH" "$BUILD_PKG_DIR/kernel/kernel.zip"
-    fi
+    # Include kernel package for recovery fallback
+    mkdir -p "$BUILD_PKG_DIR/kernel"
+    cp -f "$KERNEL_PKG_PATH" "$BUILD_PKG_DIR/kernel/kernel.zip"
 
     rm -rf "$UNPACK_K_DIR"
 fi
