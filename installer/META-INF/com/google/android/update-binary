@@ -3,16 +3,16 @@
 # QuantumROM Recovery Flashable Installer for Samsung Galaxy Tab S6 Lite (SM-P613 / gta4xlve)
 #
 
-OUTFD="/proc/self/fd/$2"
+OUTFD="$2"
+[ -z "$OUTFD" ] && OUTFD=1
 ZIPFILE="$3"
 
 ui_print() {
-    echo "ui_print $1" > "$OUTFD"
-    echo "ui_print" > "$OUTFD"
+    printf "ui_print %s\nui_print\n" "$1" >&$OUTFD 2>/dev/null || echo "$1"
 }
 
 set_progress() {
-    echo "set_progress $1" > "$OUTFD"
+    printf "set_progress %s\n" "$1" >&$OUTFD 2>/dev/null || true
 }
 
 ui_print "============================================"
@@ -52,7 +52,8 @@ chmod -R 755 "$TMP_DIR/tools" 2>/dev/null || true
 LPTOOLS="$TMP_DIR/tools/lptools_static"
 [ ! -f "$LPTOOLS" ] && LPTOOLS="$TMP_DIR/tools/lptools"
 [ ! -f "$LPTOOLS" ] && LPTOOLS="/sbin/lptools"
-[ ! -f "$LPTOOLS" ] && LPTOOLS="/sbin/lpflash"
+[ ! -f "$LPTOOLS" ] && LPTOOLS="/system/bin/lptools"
+[ ! -f "$LPTOOLS" ] && LPTOOLS="/tmp/lptools_static"
 
 # Unmount existing partitions to prevent busy errors
 ui_print "[*] Unmounting existing partitions..."
