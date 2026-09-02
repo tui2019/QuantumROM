@@ -8,7 +8,7 @@ OUTFD="$2"
 ZIPFILE="$3"
 
 ui_print() {
-    printf "ui_print %s\nui_print\n" "$1" >&$OUTFD 2>/dev/null || echo "$1"
+    printf "ui_print %s\nui_print\n" "$1" >&$OUTFD 2>/dev/null || printf "%s\n" "$1"
 }
 
 set_progress() {
@@ -28,6 +28,21 @@ mkdir -p "$TMP_DIR/tools"
 
 set_progress 0.05
 
+# Extract bundled tools
+unzip -o "$ZIPFILE" "tools/*" -d "$TMP_DIR" >/dev/null 2>&1 || true
+
+BUSYBOX="$TMP_DIR/tools/busybox"
+[ ! -x "$BUSYBOX" ] && BUSYBOX="/tmp/busybox"
+[ ! -x "$BUSYBOX" ] && BUSYBOX="busybox"
+
+LPTOOLS="$TMP_DIR/tools/lptools_static"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="/tmp/lptools_static"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="$TMP_DIR/tools/lptools"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="/sbin/lptools"
+[ ! -x "$LPTOOLS" ] && LPTOOLS="/system/bin/lptools"
+
+chmod -R 755 "$TMP_DIR/tools" 2>/dev/null || true
+
 # Verify device
 DEVICE=$(getprop ro.product.device)
 [ -z "$DEVICE" ] && DEVICE=$(getprop ro.build.product)
@@ -43,17 +58,6 @@ case "$DEVICE" in
         ui_print "[!] Warning: Unknown device code ($DEVICE), proceeding..."
         ;;
 esac
-
-ui_print " "
-ui_print "[*] Extracting installer tools..."
-unzip -o "$ZIPFILE" "tools/*" -d "$TMP_DIR" >/dev/null 2>&1
-chmod -R 755 "$TMP_DIR/tools" 2>/dev/null || true
-
-LPTOOLS="$TMP_DIR/tools/lptools_static"
-[ ! -f "$LPTOOLS" ] && LPTOOLS="$TMP_DIR/tools/lptools"
-[ ! -f "$LPTOOLS" ] && LPTOOLS="/sbin/lptools"
-[ ! -f "$LPTOOLS" ] && LPTOOLS="/system/bin/lptools"
-[ ! -f "$LPTOOLS" ] && LPTOOLS="/tmp/lptools_static"
 
 # Unmount existing partitions to prevent busy errors
 ui_print "[*] Unmounting existing partitions..."
@@ -110,16 +114,19 @@ flash_partition() {
     # Find mapped block device
     if [ -e "/dev/block/mapper/$PART" ]; then
         BLOCK_DEV="/dev/block/mapper/$PART"
-    elif [ -e "/dev/block/by-name/$PART" ]; then
-        BLOCK_DEV="/dev/block/by-name/$PART"
     elif [ -e "/dev/block/bootdevice/by-name/$PART" ]; then
         BLOCK_DEV="/dev/block/bootdevice/by-name/$PART"
+    elif [ -e "/dev/block/by-name/$PART" ]; then
+        BLOCK_DEV="/dev/block/by-name/$PART"
     fi
 
     if [ -n "$BLOCK_DEV" ] && [ -e "$BLOCK_DEV" ]; then
         ui_print "    Writing image to $BLOCK_DEV..."
-        # Direct stream pipe
-        unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=4M 2>/dev/null || unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=1M
+        if [ -x "$BUSYBOX" ]; then
+            $BUSYBOX unzip -p "$ZIPFILE" "images/${PART}.img" | $BUSYBOX dd of="$BLOCK_DEV" bs=4M 2>/dev/null || $BUSYBOX unzip -p "$ZIPFILE" "images/${PART}.img" | $BUSYBOX dd of="$BLOCK_DEV" bs=1M
+        else
+            unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=4M 2>/dev/null || unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=1M
+        fi
         ui_print "[+] Successfully flashed $PART!"
     else
         ui_print "[!] Error: Block device for $PART not found!"
@@ -158,7 +165,11 @@ if unzip -l "$ZIPFILE" "images/boot.img" >/dev/null 2>&1; then
     [ ! -e "$BOOT_DEV" ] && BOOT_DEV="/dev/block/bootdevice/by-name/boot"
     if [ -e "$BOOT_DEV" ]; then
         ui_print "[*] Streaming boot.img to $BOOT_DEV..."
-        unzip -p "$ZIPFILE" "images/boot.img" | dd of="$BOOT_DEV" bs=4M
+        if [ -x "$BUSYBOX" ]; then
+            $BUSYBOX unzip -p "$ZIPFILE" "images/boot.img" | $BUSYBOX dd of="$BOOT_DEV" bs=4M
+        else
+            unzip -p "$ZIPFILE" "images/boot.img" | dd of="$BOOT_DEV" bs=4M
+        fi
         ui_print "[+] boot.img flashed successfully!"
     fi
 fi
@@ -168,7 +179,11 @@ if unzip -l "$ZIPFILE" "images/dtbo.img" >/dev/null 2>&1; then
     [ ! -e "$DTBO_DEV" ] && DTBO_DEV="/dev/block/bootdevice/by-name/dtbo"
     if [ -e "$DTBO_DEV" ]; then
         ui_print "[*] Streaming dtbo.img to $DTBO_DEV..."
-        unzip -p "$ZIPFILE" "images/dtbo.img" | dd of="$DTBO_DEV" bs=4M
+        if [ -x "$BUSYBOX" ]; then
+            $BUSYBOX unzip -p "$ZIPFILE" "images/dtbo.img" | $BUSYBOX dd of="$DTBO_DEV" bs=4M
+        else
+            unzip -p "$ZIPFILE" "images/dtbo.img" | dd of="$DTBO_DEV" bs=4M
+        fi
         ui_print "[+] dtbo.img flashed successfully!"
     fi
 fi
