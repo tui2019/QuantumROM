@@ -46,7 +46,7 @@ esac
 
 ui_print " "
 ui_print "[*] Extracting installer tools..."
-unzip -o "$ZIPFILE" "tools/*" "images.info" -d "$TMP_DIR" >/dev/null 2>&1
+unzip -o "$ZIPFILE" "tools/*" -d "$TMP_DIR" >/dev/null 2>&1
 chmod -R 755 "$TMP_DIR/tools" 2>/dev/null || true
 
 LPTOOLS="$TMP_DIR/tools/lptools_static"
@@ -65,53 +65,48 @@ SUPER_DEV="/dev/block/by-name/super"
 
 if [ -e "$SUPER_DEV" ]; then
     ui_print "[+] Dynamic super partition: $SUPER_DEV"
+    if [ -x "$LPTOOLS" ]; then
+        ui_print "[*] Unlocking dynamic partition group limits..."
+        "$LPTOOLS" unlimited-group main 2>/dev/null || true
+        "$LPTOOLS" unlimited-group qti_dynamic_partitions 2>/dev/null || true
+        "$LPTOOLS" unlimited-group default 2>/dev/null || true
+    fi
 fi
 
-get_part_size() {
+prepare_logical_partition() {
     local PART="$1"
-    local SIZE=""
+    local SIZE_BYTES="$2"
+    local DISPLAY_MB="$3"
 
-    # 1. Check images.info file
-    if [ -f "$TMP_DIR/images.info" ]; then
-        SIZE=$(grep "^${PART}:" "$TMP_DIR/images.info" | cut -d: -f2 | tr -d ' \r\n')
+    ui_print "[*] Preparing dynamic partition: $PART (${DISPLAY_MB} MB)..."
+
+    if [ -x "$LPTOOLS" ] && [ -e "$SUPER_DEV" ]; then
+        "$LPTOOLS" unmap "$PART" 2>/dev/null || true
+        "$LPTOOLS" create "$PART" "$SIZE_BYTES" 2>/dev/null || true
+        "$LPTOOLS" resize "$PART" "$SIZE_BYTES" 2>/dev/null || true
+        "$LPTOOLS" map "$PART" 2>/dev/null || true
     fi
-
-    # 2. Check embedded known sizes
-    if [ -z "$SIZE" ] || [ "$SIZE" -eq 0 ] 2>/dev/null; then
-        case "$PART" in
-            system)  SIZE="3074949120" ;;
-            vendor)  SIZE="628994048" ;;
-            product) SIZE="957112320" ;;
-            odm)     SIZE="67108864" ;;
-        esac
-    fi
-
-    # 3. Fallback to zip header inspection
-    if [ -z "$SIZE" ] || [ "$SIZE" -eq 0 ] 2>/dev/null; then
-        SIZE=$(unzip -l "$ZIPFILE" "images/${PART}.img" 2>/dev/null | grep "images/${PART}.img" | awk '{print $1}')
-    fi
-
-    echo "${SIZE:-0}"
 }
 
 flash_partition() {
     local PART="$1"
     local BLOCK_DEV=""
 
-    local IMG_SIZE=$(get_part_size "$PART")
-    local SIZE_MB=$(( IMG_SIZE / 1024 / 1024 ))
-    ui_print "[*] Flashing $PART (${SIZE_MB} MB)..."
-
-    # If lptools is available and super partition exists, resize & map logical partition
-    if [ -x "$LPTOOLS" ] && [ -e "$SUPER_DEV" ] && [ "$IMG_SIZE" -gt 0 ]; then
-        ui_print "    Resizing $PART to ${SIZE_MB} MB in dynamic super..."
-        "$LPTOOLS" unmap "$PART" 2>/dev/null || true
-        "$LPTOOLS" create "$PART" "$IMG_SIZE" 2>/dev/null || true
-        "$LPTOOLS" resize "$PART" "$IMG_SIZE" 2>/dev/null || true
-        "$LPTOOLS" map "$PART" 2>/dev/null || true
+    # Check if image exists in ZIP
+    if ! unzip -l "$ZIPFILE" "images/${PART}.img" >/dev/null 2>&1; then
+        ui_print "[-] images/${PART}.img not present in zip, skipping."
+        return 0
     fi
 
-    # Find block device
+    case "$PART" in
+        system)  prepare_logical_partition "system" "3074949120" "2932" ;;
+        vendor)  prepare_logical_partition "vendor" "628994048" "600" ;;
+        product) prepare_logical_partition "product" "957112320" "912" ;;
+        odm)     prepare_logical_partition "odm" "67108864" "64" ;;
+        *)       prepare_logical_partition "$PART" "1073741824" "1024" ;;
+    esac
+
+    # Find mapped block device
     if [ -e "/dev/block/mapper/$PART" ]; then
         BLOCK_DEV="/dev/block/mapper/$PART"
     elif [ -e "/dev/block/by-name/$PART" ]; then
@@ -121,25 +116,25 @@ flash_partition() {
     fi
 
     if [ -n "$BLOCK_DEV" ] && [ -e "$BLOCK_DEV" ]; then
-        ui_print "    Streaming directly to $BLOCK_DEV..."
-        # Direct stream pipe: avoids storing 3GB image in /tmp RAM
+        ui_print "    Writing image to $BLOCK_DEV..."
+        # Direct stream pipe
         unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=4M 2>/dev/null || unzip -p "$ZIPFILE" "images/${PART}.img" | dd of="$BLOCK_DEV" bs=1M
         ui_print "[+] Successfully flashed $PART!"
     else
-        ui_print "[!] Error: Target block device for $PART not found!"
+        ui_print "[!] Error: Block device for $PART not found!"
     fi
 }
 
 set_progress 0.15
 flash_partition "system"
 
-set_progress 0.40
+set_progress 0.45
 flash_partition "vendor"
 
-set_progress 0.60
+set_progress 0.65
 flash_partition "product"
 
-set_progress 0.75
+set_progress 0.80
 if unzip -l "$ZIPFILE" "images/odm.img" >/dev/null 2>&1; then
     flash_partition "odm"
 fi
