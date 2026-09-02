@@ -997,9 +997,11 @@ UPDATE_SDHMS() {
     local EXTRACTED_FIRM_DIR="$1"
 
     echo "- Adding alternative SDHMS app."
-	rm -rf "${EXTRACTED_FIRM_DIR}/system/priv-app/SamsungDeviceHealthManagerService"
-	cp -a "$(pwd)/QuantumROM/Mods/Apps/SDHMS/." "${EXTRACTED_FIRM_DIR}/"
+    rm -rf "${EXTRACTED_FIRM_DIR}/system/system/priv-app/SamsungDeviceHealthManagerService"
+    rm -rf "${EXTRACTED_FIRM_DIR}/system/priv-app/SamsungDeviceHealthManagerService"
+    cp -a "$(pwd)/QuantumROM/Mods/Apps/SDHMS/." "${EXTRACTED_FIRM_DIR}/"
 }
+
 
 
 PATCH_SSRM() {
@@ -1942,7 +1944,7 @@ APPLY_STOCK_CONFIG() {
 
 	# Fix samsung device health manager service
     if [ "$USE_ALT_SDHMS_APP" = "TRUE" ]; then
-        if [ -n "$SDHMS_MAX_SUPPORTED_OS_SDK" ] && [ "$(echo "$SDK > $SDHMS_MAX_SUPPORTED_OS_SDK" | bc -l)" -eq 1 ]; then
+        if [ -n "$SDHMS_MAX_SUPPORTED_OS_SDK" ] && [ "$(echo "$SDK >= $SDHMS_MAX_SUPPORTED_OS_SDK" | bc -l)" -eq 1 ]; then
             UPDATE_SDHMS "$EXTRACTED_FIRM_DIR"
         fi
     fi
