@@ -732,30 +732,35 @@ to_pattern = sys.argv[3].lower()
 try:
     with open(file_path, 'rb') as f:
         content = f.read()
-except Exception:
-    sys.exit(1)
+except Exception as e:
+    print(f'- File read error: {e}')
+    sys.exit(0)
 
 hex_content = content.hex()
 from_regex = from_pattern.replace('..', '[0-9a-f]{2}')
 match = re.search(from_regex, hex_content, re.IGNORECASE)
+
 if not match:
-    sys.exit(1)
+    check_to = to_pattern.replace('..', '')
+    if check_to and check_to in hex_content:
+        print('- Already patched.')
+    else:
+        print('- Pattern not found, skipping.')
+    sys.exit(0)
 
 start, end = match.span()
 new_hex_content = hex_content[:start] + to_pattern + hex_content[end:]
 
-with open(file_path, 'wb') as f:
-    f.write(bytes.fromhex(new_hex_content))
+try:
+    with open(file_path, 'wb') as f:
+        f.write(bytes.fromhex(new_hex_content))
+    print('- Patch success')
+except Exception as e:
+    print(f'- File write error: {e}')
+sys.exit(0)
 " "$FILE" "$FROM" "$TO"
-
-    if [ $? -eq 0 ]; then
-        echo -e "- Patch success"
-        return 0
-    else
-        echo -e "- Pattern not found or patch failed: $FROM"
-        return 0
-    fi
 }
+
 
 
 PATCH_FLAG_SECURE() {
