@@ -85,6 +85,12 @@ OTA_CERT="$QT_DIR/ota_keys/ota_key.x509.pem"
 OTA_KEY="$QT_DIR/ota_keys/ota_key.pk8"
 SIGNAPK_BIN="$QT_DIR/bin/signapk/signapk"
 
+# If public cert does not exist, extract it from otacerts.zip
+if [ ! -f "$OTA_CERT" ] && [ -f "$QT_DIR/QuantumROM/Mods/OTA/system/etc/security/otacerts.zip" ]; then
+    mkdir -p "$QT_DIR/ota_keys"
+    unzip -p "$QT_DIR/QuantumROM/Mods/OTA/system/etc/security/otacerts.zip" ota_key.x509.pem > "$OTA_CERT" 2>/dev/null || true
+fi
+
 # If private key was passed via environment variable (e.g. GitHub Actions secret)
 if [ ! -f "$OTA_KEY" ] && [ -n "${OTA_KEY_BASE64:-}" ]; then
     mkdir -p "$QT_DIR/ota_keys"
