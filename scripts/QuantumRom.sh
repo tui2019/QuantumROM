@@ -2502,13 +2502,24 @@ GEN_FS_CONFIG() {
 
     rm -f "$TMP_EXISTING"
 
+    # Ensure root partition entries are present in fs_config for mkfs.erofs / make_ext4fs
+    if ! grep -qE "^${PARTITION}[[:space:]]" "$FS_CONFIG"; then
+        printf "%s 0 0 0755\n" "$PARTITION" >> "$FS_CONFIG"
+    fi
+    if ! grep -qE "^/[[:space:]]" "$FS_CONFIG"; then
+        printf "/ 0 0 0755\n" >> "$FS_CONFIG"
+    fi
+    if ! grep -qE "^/${PARTITION}[[:space:]]" "$FS_CONFIG"; then
+        printf "/%s 0 0 0755\n" "$PARTITION" >> "$FS_CONFIG"
+    fi
+
     # Prune any entries in fs_config for files that do not exist on disk
     local TMP_CLEAN="$(mktemp)"
     while IFS= read -r line || [[ -n "$line" ]]; do
         [ -z "$line" ] && continue
         local p=$(echo "$line" | awk '{print $1}')
         local rel_p="${p#${PARTITION}/}"
-        if [ "$p" = "$PARTITION" ] || [ -e "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ] || [ -L "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ]; then
+        if [ "$p" = "$PARTITION" ] || [ "$p" = "/" ] || [ "$p" = "/$PARTITION" ] || [ -e "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ] || [ -L "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ]; then
             echo "$line" >> "$TMP_CLEAN"
         fi
     done < "$FS_CONFIG"
@@ -2610,6 +2621,11 @@ GEN_FILE_CONTEXTS() {
     if ! grep -qE "^/${PARTITION}\(/\.\*\)\?[[:space:]]" "$FILE_CONTEXTS"; then
         printf "/%s(/.*)? %s\n" "$PARTITION" "$CONTEXT" >> "$FILE_CONTEXTS"
         echo "- Added: /${PARTITION}(/.*)? ${CONTEXT}"
+    fi
+
+    if ! grep -qE "^/${PARTITION}[[:space:]]" "$FILE_CONTEXTS"; then
+        printf "/%s %s\n" "$PARTITION" "$CONTEXT" >> "$FILE_CONTEXTS"
+        echo "- Added: /${PARTITION} ${CONTEXT}"
     fi
 
     echo -e "- $PARTITION file_contexts generated"
