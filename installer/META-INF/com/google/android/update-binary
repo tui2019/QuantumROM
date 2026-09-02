@@ -46,7 +46,7 @@ esac
 
 ui_print " "
 ui_print "[*] Extracting installer tools..."
-unzip -o "$ZIPFILE" "tools/*" -d "$TMP_DIR" >/dev/null 2>&1
+unzip -o "$ZIPFILE" "tools/*" "images.info" -d "$TMP_DIR" >/dev/null 2>&1
 chmod -R 755 "$TMP_DIR/tools" 2>/dev/null || true
 
 LPTOOLS="$TMP_DIR/tools/lptools_static"
@@ -67,22 +67,49 @@ if [ -e "$SUPER_DEV" ]; then
     ui_print "[+] Dynamic super partition: $SUPER_DEV"
 fi
 
+get_part_size() {
+    local PART="$1"
+    local SIZE=""
+
+    # 1. Check images.info file
+    if [ -f "$TMP_DIR/images.info" ]; then
+        SIZE=$(grep "^${PART}:" "$TMP_DIR/images.info" | cut -d: -f2 | tr -d ' \r\n')
+    fi
+
+    # 2. Check embedded known sizes
+    if [ -z "$SIZE" ] || [ "$SIZE" -eq 0 ] 2>/dev/null; then
+        case "$PART" in
+            system)  SIZE="3074949120" ;;
+            vendor)  SIZE="628994048" ;;
+            product) SIZE="957112320" ;;
+            odm)     SIZE="67108864" ;;
+        esac
+    fi
+
+    # 3. Fallback to zip header inspection
+    if [ -z "$SIZE" ] || [ "$SIZE" -eq 0 ] 2>/dev/null; then
+        SIZE=$(unzip -l "$ZIPFILE" "images/${PART}.img" 2>/dev/null | grep "images/${PART}.img" | awk '{print $1}')
+    fi
+
+    echo "${SIZE:-0}"
+}
+
 flash_partition() {
     local PART="$1"
     local BLOCK_DEV=""
 
-    # Check if image exists in ZIP
-    if ! unzip -l "$ZIPFILE" "images/${PART}.img" >/dev/null 2>&1; then
-        ui_print "[-] images/${PART}.img not present in zip, skipping."
-        return 0
-    fi
-
-    # Read uncompressed size directly from ZIP header (avoids extracting to RAM)
-    local IMG_SIZE=$(unzip -l "$ZIPFILE" "images/${PART}.img" 2>/dev/null | grep "images/${PART}.img" | awk '{print $1}')
-    [ -z "$IMG_SIZE" ] && IMG_SIZE=0
-
+    local IMG_SIZE=$(get_part_size "$PART")
     local SIZE_MB=$(( IMG_SIZE / 1024 / 1024 ))
     ui_print "[*] Flashing $PART (${SIZE_MB} MB)..."
+
+    # If lptools is available and super partition exists, resize & map logical partition
+    if [ -x "$LPTOOLS" ] && [ -e "$SUPER_DEV" ] && [ "$IMG_SIZE" -gt 0 ]; then
+        ui_print "    Resizing $PART to ${SIZE_MB} MB in dynamic super..."
+        "$LPTOOLS" unmap "$PART" 2>/dev/null || true
+        "$LPTOOLS" create "$PART" "$IMG_SIZE" 2>/dev/null || true
+        "$LPTOOLS" resize "$PART" "$IMG_SIZE" 2>/dev/null || true
+        "$LPTOOLS" map "$PART" 2>/dev/null || true
+    fi
 
     # Find block device
     if [ -e "/dev/block/mapper/$PART" ]; then
@@ -92,14 +119,6 @@ flash_partition() {
     elif [ -e "/dev/block/bootdevice/by-name/$PART" ]; then
         BLOCK_DEV="/dev/block/bootdevice/by-name/$PART"
     fi
-
-    # If lptools is available and super partition exists, resize & map logical partition
-    if [ -x "$LPTOOLS" ] && [ -e "$SUPER_DEV" ] && [ "$IMG_SIZE" -gt 0 ]; then
-        "$LPTOOLS" resize "$PART" "$IMG_SIZE" 2>/dev/null || true
-        "$LPTOOLS" map "$PART" 2>/dev/null || true
-    fi
-
-    [ -e "/dev/block/mapper/$PART" ] && BLOCK_DEV="/dev/block/mapper/$PART"
 
     if [ -n "$BLOCK_DEV" ] && [ -e "$BLOCK_DEV" ]; then
         ui_print "    Streaming directly to $BLOCK_DEV..."
