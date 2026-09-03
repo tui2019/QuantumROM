@@ -2383,6 +2383,7 @@ APPLY_CUSTOM_FEATURES() {
     if [ -d "$(pwd)/QuantumROM/Mods/OTA/system" ]; then
         echo -e "- Integrating LineageOS OTA Updater and Keystore..."
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/priv-app/Updater"
+        mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/priv-app/com.wssyncmldm"
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/permissions"
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/sysconfig"
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/security"
