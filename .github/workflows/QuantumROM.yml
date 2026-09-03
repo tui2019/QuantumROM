@@ -131,11 +131,16 @@ jobs:
   build_rom:
     name: Build Recovery Flashable ROM
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     if: github.event_name == 'repository_dispatch' || (github.event_name == 'workflow_dispatch' && inputs.BUILD_KERNEL == 'False')
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GIT_TOKEN || github.token }}
 
       - name: Set variables
         run: |
@@ -362,12 +367,19 @@ jobs:
           OTA_KEY_BASE64: ${{ secrets.OTA_KEY_BASE64 }}
         run: |
           echo "BUILD_TIME=$(TZ='Asia/Dhaka' date '+%Y-%m-%d %I:%M:%S %p UTC+6')" | tee -a "$GITHUB_ENV"
-          ZIP_NAME="${TARGET_DEVICE}_Port_For_${STOCK_DEVICE}_Recovery.zip"
+          DATE_TAG=$(date '+%Y%m%d')
+          ROM_VERSION="16.2"
+          ZIP_NAME="ProjectRevive-${ROM_VERSION}-${DATE_TAG}-p613.zip"
           bash scripts/make_flashable_zip.sh "$OUT_DIR" "$TARGET_DEVICE" "$STOCK_DEVICE" "$OUT_DIR/kernel.zip" "$ZIP_NAME"
           echo "ZIP_PATH=$OUT_DIR/$ZIP_NAME" | tee -a "$GITHUB_ENV"
+          echo "ZIP_NAME=$ZIP_NAME" | tee -a "$GITHUB_ENV"
+          echo "ROM_VERSION=$ROM_VERSION" | tee -a "$GITHUB_ENV"
 
-      - name: Upload file in GoFile & Create Release
+      - name: Upload to SourceForge, Update OTA Config & Create Release
         env:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+          SF_SSH_KEY: ${{ secrets.SF_SSH_KEY }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PROJECT: ${{ secrets.SF_PROJECT || 'project-revive' }}
         run: |
           bash release.sh
