@@ -10,10 +10,6 @@ ui_print("Flashing boot.img...");
 package_extract_file("boot.img", "/dev/block/by-name/boot");
 set_progress(0.200000);
 
-# ── 2. Flash dtbo.img (if present) ───────────────────────────────────────────
-ui_print("Flashing dtbo.img...");
-package_extract_file("dtbo.img", "/dev/block/by-name/dtbo");
-set_progress(0.250000);
 
 # ── 3. Flash super.img ────────────────────────────────────────────────────────
 ui_print("Flashing super.img (this may take a few minutes)...");

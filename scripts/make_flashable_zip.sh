@@ -34,15 +34,10 @@ if [ -f "$OUT_DIR/super.img" ]; then
     cp -f "$OUT_DIR/super.img" "$BUILD_PKG_DIR/super.img"
 fi
 
-# Copy Kernel Images (boot.img & dtbo.img)
+# Copy Kernel Images (boot.img)
 if [ -f "$OUT_DIR/boot.img" ]; then
     echo "[+] Adding boot.img ($(du -h "$OUT_DIR/boot.img" | cut -f1))"
     cp -f "$OUT_DIR/boot.img" "$BUILD_PKG_DIR/boot.img"
-fi
-
-if [ -f "$OUT_DIR/dtbo.img" ]; then
-    echo "[+] Adding dtbo.img ($(du -h "$OUT_DIR/dtbo.img" | cut -f1))"
-    cp -f "$OUT_DIR/dtbo.img" "$BUILD_PKG_DIR/dtbo.img"
 fi
 
 # If KERNEL_PKG_PATH was provided as a zip
@@ -56,11 +51,6 @@ if [ -n "$KERNEL_PKG_PATH" ] && [ -f "$KERNEL_PKG_PATH" ]; then
     if [ -f "$UNPACK_K_DIR/boot.img" ] && [ ! -f "$BUILD_PKG_DIR/boot.img" ]; then
         echo "[+] Found boot.img inside kernel package."
         cp -f "$UNPACK_K_DIR/boot.img" "$BUILD_PKG_DIR/boot.img"
-    fi
-
-    if [ -f "$UNPACK_K_DIR/dtbo.img" ] && [ ! -f "$BUILD_PKG_DIR/dtbo.img" ]; then
-        echo "[+] Found dtbo.img inside kernel package."
-        cp -f "$UNPACK_K_DIR/dtbo.img" "$BUILD_PKG_DIR/dtbo.img"
     fi
 
     rm -rf "$UNPACK_K_DIR"

@@ -2949,6 +2949,10 @@ DOWNLOAD_KERNEL_PACKAGE() {
     if echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
         echo "$RELEASE_JSON" | jq -r '.assets[] | "\(.name) \(.browser_download_url)"' | while read -r name url; do
             [ -z "$name" ] || [ "$name" = "null" ] && continue
+            if [ "$name" = "dtbo.img" ]; then
+                echo "[!] Skipping dtbo.img (preventing dangerous DTBO overwrite)"
+                continue
+            fi
             echo "[+] Downloading asset: $name"
             curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$url" -o "$OUT_DIR/$name"
         done
