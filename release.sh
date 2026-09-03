@@ -41,10 +41,19 @@ if [ -n "$SF_SSH_KEY" ] && [ -n "$SF_USERNAME" ]; then
     chmod 600 ~/.ssh/id_sf_ed25519
     ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts 2>/dev/null || true
 
-    REMOTE_PATH="/home/frs/project/${SF_PROJECT}/${SF_DIR_NAME}"
-    echo "[*] Uploading $ZIP_NAME to SourceForge ($REMOTE_PATH)..."
-    ssh -i ~/.ssh/id_sf_ed25519 -o StrictHostKeyChecking=no "$SF_USERNAME@frs.sourceforge.net" "mkdir -p $REMOTE_PATH" 2>/dev/null || true
-    rsync -avP -e "ssh -i ~/.ssh/id_sf_ed25519 -o StrictHostKeyChecking=no" "$ZIP_PATH" "$SF_USERNAME@frs.sourceforge.net:${REMOTE_PATH}/${ZIP_NAME}"
+    REMOTE_BASE="/home/frs/project/${SF_PROJECT}"
+    echo "[*] Uploading $ZIP_NAME to SourceForge (${REMOTE_BASE}/${SF_DIR_NAME}/)..."
+    
+    # Create temporary local directory structure to let rsync handle remote directory creation
+    TEMP_STAGE="$(mktemp -d)"
+    mkdir -p "${TEMP_STAGE}/${SF_DIR_NAME}"
+    ln -s "$ZIP_PATH" "${TEMP_STAGE}/${SF_DIR_NAME}/${ZIP_NAME}" 2>/dev/null || cp "$ZIP_PATH" "${TEMP_STAGE}/${SF_DIR_NAME}/${ZIP_NAME}"
+    
+    rsync -avPL -e "ssh -i ~/.ssh/id_sf_ed25519 -o StrictHostKeyChecking=no" \
+        "${TEMP_STAGE}/${SF_DIR_NAME}" \
+        "$SF_USERNAME@frs.sourceforge.net:${REMOTE_BASE}/"
+        
+    rm -rf "$TEMP_STAGE"
     echo "[+] Upload to SourceForge completed successfully!"
     echo "[+] Direct Download: $DOWNLOAD_URL"
 else
