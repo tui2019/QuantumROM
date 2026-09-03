@@ -208,25 +208,7 @@ if [ -n "$BOOT_IN_ZIP" ] && [ -e "$BOOT_DEV" ]; then
     ui_print "[+] boot.img flashed successfully!"
 fi
 
-DTBO_DEV="/dev/block/bootdevice/by-name/dtbo"
-[ ! -e "$DTBO_DEV" ] && DTBO_DEV="/dev/block/by-name/dtbo"
 
-DTBO_IN_ZIP=""
-if unzip -l "$ZIPFILE" "images/dtbo.img" >/dev/null 2>&1; then
-    DTBO_IN_ZIP="images/dtbo.img"
-elif unzip -l "$ZIPFILE" "dtbo.img" >/dev/null 2>&1; then
-    DTBO_IN_ZIP="dtbo.img"
-fi
-
-if [ -n "$DTBO_IN_ZIP" ] && [ -e "$DTBO_DEV" ]; then
-    ui_print "[*] Flashing dtbo.img directly to $DTBO_DEV..."
-    if [ -x "$BUSYBOX" ]; then
-        "$BUSYBOX" unzip -p "$ZIPFILE" "$DTBO_IN_ZIP" | "$BUSYBOX" dd of="$DTBO_DEV" bs=4M
-    else
-        unzip -p "$ZIPFILE" "$DTBO_IN_ZIP" | dd of="$DTBO_DEV" bs=4M
-    fi
-    ui_print "[+] dtbo.img flashed successfully!"
-fi
 
 # Fallback to AnyKernel if direct boot.img is not present
 if [ -z "$BOOT_IN_ZIP" ] && unzip -l "$ZIPFILE" "kernel/kernel.zip" >/dev/null 2>&1; then

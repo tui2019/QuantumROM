@@ -2960,6 +2960,21 @@ DOWNLOAD_KERNEL_PACKAGE() {
         # Standardize names
         [ -f "$OUT_DIR"/AnyKernel3*.zip ] && cp -f "$OUT_DIR"/AnyKernel3*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
         [ -f "$OUT_DIR"/legion*.zip ] && cp -f "$OUT_DIR"/legion*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
+
+        # If Image.gz was downloaded and no boot.img exists yet, assemble boot.img using stock device template
+        if [ -f "$OUT_DIR/Image.gz" ] && [ ! -f "$OUT_DIR/boot.img" ]; then
+            local TEMPLATE_DIR="${DEVICES_DIR:-$(pwd)/QuantumROM/Devices}/${STOCK_DEVICE}/boot_template"
+            if [ -d "$TEMPLATE_DIR" ] && [ -f "$TEMPLATE_DIR/header.bin" ] && [ -f "$TEMPLATE_DIR/ramdisk.img" ]; then
+                echo "=============================================="
+                echo "  Assembling boot.img from Image.gz + Ramdisk "
+                echo "=============================================="
+                python3 "$(pwd)/scripts/repack_boot.py" \
+                    "$TEMPLATE_DIR/header.bin" \
+                    "$TEMPLATE_DIR/ramdisk.img" \
+                    "$OUT_DIR/Image.gz" \
+                    "$OUT_DIR/boot.img"
+            fi
+        fi
     else
         echo "[!] Warning: No release assets found in $KERNEL_REPO"
     fi
