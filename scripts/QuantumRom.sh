@@ -2386,6 +2386,7 @@ APPLY_CUSTOM_FEATURES() {
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/permissions"
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/sysconfig"
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/security"
+        mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/init/hw"
         cp -rfa "$(pwd)/QuantumROM/Mods/OTA/system/." "${EXTRACTED_FIRM_DIR}/system/system/"
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "lineage.updater.uri" "https://raw.githubusercontent.com/tui2019/QuantumROM/main/ota/{device}.json"
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.lineage.device" "$TARGET_DEVICE"
