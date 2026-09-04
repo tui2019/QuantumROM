@@ -6,7 +6,12 @@ on:
       BUILD_KERNEL:
         description: "Trigger kernel build first before building ROM? (True/False)"
         required: true
-        default: "True"
+        default: "False"
+
+      PUBLISH_RELEASE:
+        description: "Publish official release to SourceForge & update OTA? (True/False)"
+        required: true
+        default: "False"
 
       STOCK_DEVICE:
         description: "STOCK_DEVICE_MODEL (e.g. SM-P613)"
@@ -116,7 +121,8 @@ jobs:
                 \"target_csc\": \"${{ inputs.TARGET_DEVICE_CSC }}\",
                 \"output_fs\": \"${{ inputs.OUTPUT_FILESYSTEM }}\",
                 \"vendor_repo\": \"${{ inputs.VENDOR_REPO }}\",
-                \"kernel_repo\": \"${{ inputs.KERNEL_REPO }}\"
+                \"kernel_repo\": \"${{ inputs.KERNEL_REPO }}\",
+                \"publish_release\": \"${{ inputs.PUBLISH_RELEASE }}\"
               }
             }")
 
@@ -176,6 +182,7 @@ jobs:
 
           echo "OUTPUT_FILESYSTEM=$OUTPUT_FS" | tee -a "$GITHUB_ENV"
           echo "COMPRESS_IMG_TO_XZ=${{ inputs.COMPRESS_IMG_TO_XZ || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "PUBLISH_RELEASE=${{ inputs.PUBLISH_RELEASE || github.event.client_payload.publish_release || 'False' }}" | tee -a "$GITHUB_ENV"
 
       - name: Validate STOCK_DEVICE - ${{ env.STOCK_DEVICE }}
         run: |
@@ -375,11 +382,12 @@ jobs:
           echo "ZIP_NAME=$ZIP_NAME" | tee -a "$GITHUB_ENV"
           echo "ROM_VERSION=$ROM_VERSION" | tee -a "$GITHUB_ENV"
 
-      - name: Upload to SourceForge, Update OTA Config & Create Release
+      - name: Release ROM (SourceForge + OTA or GoFile)
         env:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
           SF_SSH_KEY: ${{ secrets.SF_SSH_KEY }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PROJECT: ${{ secrets.SF_PROJECT || 'project-revive' }}
+          PUBLISH_RELEASE: ${{ env.PUBLISH_RELEASE }}
         run: |
           bash release.sh
