@@ -35,6 +35,28 @@ echo " SHA-256: $SHA256_SUM"
 echo " MD5: $MD5_SUM"
 echo "=============================================="
 
+# ---------------------------------------------------------
+# STEP 1: ALWAYS UPLOAD TO GOFILE (Fast Direct Mirror)
+# ---------------------------------------------------------
+echo "[*] Uploading $ZIP_NAME to GoFile for fast direct downloads..."
+GOFILE_LINK=""
+if [ -f "upload.sh" ]; then
+    GOFILE_LINK=$(bash upload.sh "$ZIP_PATH" | tail -n 1 || true)
+fi
+
+if [ -n "$GOFILE_LINK" ] && [[ "$GOFILE_LINK" == http* ]]; then
+    echo "=============================================="
+    echo " ⚡ GoFile Fast Download: $GOFILE_LINK"
+    echo "=============================================="
+else
+    echo "[!] Notice: GoFile upload did not return a valid URL (got: '$GOFILE_LINK')."
+    GOFILE_LINK=""
+fi
+
+
+# ---------------------------------------------------------
+# STEP 2: HANDLE PUBLISH_RELEASE (SourceForge + OTA Config)
+# ---------------------------------------------------------
 if [ "$PUBLISH_RELEASE" = "True" ]; then
     echo ">>> [MODE: OFFICIAL RELEASE] Uploading to SourceForge & updating OTA configuration..."
 
@@ -135,16 +157,22 @@ EOF
         fi
     fi
 
-    # 5. Create Official GitHub Release
+    # 5. Create Official GitHub Release with BOTH mirrors
     if [ -n "$GIT_AUTH_TOKEN" ]; then
         TAG_NAME="v${ROM_VERSION}-${DATE_TAG}"
         RELEASE_TITLE="Project Revive ${ROM_VERSION} (${STOCK_DEVICE})"
 
+        DOWNLOAD_LINKS="* **SourceForge (Official & OTA Mirror):** [${ZIP_NAME}](${DOWNLOAD_URL})"
+        if [ -n "$GOFILE_LINK" ]; then
+            DOWNLOAD_LINKS="* **GoFile (Fast Direct Download):** [${ZIP_NAME}](${GOFILE_LINK})
+* **SourceForge (Official & OTA Mirror):** [${ZIP_NAME}](${DOWNLOAD_URL})"
+        fi
+
         RELEASE_BODY="### 🚀 Project Revive ${ROM_VERSION}
 Ported from **${TARGET_DEVICE}** for **${STOCK_DEVICE}**.
 
-#### 📦 Download:
-* **SourceForge Mirror:** [${ZIP_NAME}](${DOWNLOAD_URL})
+#### 📦 Downloads:
+${DOWNLOAD_LINKS}
 
 #### 📊 Build Details:
 * **Filename:** \`${ZIP_NAME}\`
@@ -187,17 +215,17 @@ print(json.dumps({
     echo "[SUCCESS] Official release published to SourceForge & OTA config updated!"
 
 else
-    echo ">>> [MODE: TEST BUILD] PUBLISH_RELEASE is False. Uploading to GoFile..."
+    echo ">>> [MODE: TEST BUILD] PUBLISH_RELEASE is False."
 
-    GOFILE_LINK=$(bash upload.sh "$ZIP_PATH")
-    echo "=============================================="
-    echo " 🌎 GoFile Test Download: $GOFILE_LINK"
-    echo "=============================================="
+    DOWNLOAD_MD="* **Download (GoFile):** \`GoFile upload unavailable\`"
+    if [ -n "$GOFILE_LINK" ]; then
+        DOWNLOAD_MD="* **Download (GoFile):** [$ZIP_NAME]($GOFILE_LINK)"
+    fi
 
     if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         {
             echo "### 🧪 Test Build Completed"
-            echo "* **Download (GoFile):** [$ZIP_NAME]($GOFILE_LINK)"
+            echo "$DOWNLOAD_MD"
             echo "* **Size:** $FILE_SIZE_HUMAN"
             echo "* **SHA-256:** \`$SHA256_SUM\`"
             echo ""
@@ -215,7 +243,7 @@ else
 Ported from **${TARGET_DEVICE}** for **${STOCK_DEVICE}**.
 
 #### 📦 Download:
-* **GoFile Link:** [${ZIP_NAME}](${GOFILE_LINK})
+${DOWNLOAD_MD}
 
 #### 📊 Build Details:
 * **Filename:** \`${ZIP_NAME}\`
@@ -225,7 +253,7 @@ Ported from **${TARGET_DEVICE}** for **${STOCK_DEVICE}**.
 * **MD5:** \`${MD5_SUM}\`
 
 > [!NOTE]
-> This is a test/staging build. It was uploaded to GoFile and not pushed to the public OTA channel or SourceForge.
+> This is a test/staging build. It was not pushed to the public OTA channel or SourceForge.
 "
 
         JSON_PAYLOAD=$(python3 -c "
@@ -247,5 +275,5 @@ print(json.dumps({
             -d "$JSON_PAYLOAD" > /dev/null && echo "[+] Test GitHub Release published successfully!" || echo "[!] Failed to publish GitHub Release."
     fi
 
-    echo "[SUCCESS] Test build uploaded to GoFile!"
+    echo "[SUCCESS] Test build processed!"
 fi
