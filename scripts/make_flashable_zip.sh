@@ -7,7 +7,7 @@ OUT_DIR="$1"
 TARGET_DEVICE="$2"
 STOCK_DEVICE="$3"
 KERNEL_PKG_PATH="${4:-}"
-OUTPUT_ZIP_NAME="${5:-QuantumROM_${TARGET_DEVICE}_Port_For_${STOCK_DEVICE}_Recovery.zip}"
+OUTPUT_ZIP_NAME="${5:-ProjectRevive_${TARGET_DEVICE}_Port_For_${STOCK_DEVICE}_Recovery.zip}"
 
 QT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER_DIR="$QT_DIR/installer"

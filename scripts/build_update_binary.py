@@ -17,7 +17,7 @@ def main():
 
     script_header = r'''#!/sbin/sh
 #
-# QuantumROM Recovery Flashable Installer for Samsung Galaxy Tab S6 Lite (SM-P613 / gta4xlve)
+# Project Revive Recovery Flashable Installer for Samsung Galaxy Tab S6 Lite (SM-P613 / gta4xlve)
 #
 
 OUTFD="$2"
@@ -33,12 +33,12 @@ set_progress() {
 }
 
 ui_print "============================================"
-ui_print "          QuantumROM OS Installer           "
+ui_print "        Project Revive OS Installer         "
 ui_print "    One UI 8.5 Port for Galaxy Tab S6 Lite  "
 ui_print "============================================"
 ui_print " "
 
-TMP_DIR="/tmp/quantum_installer"
+TMP_DIR="/tmp/revive_installer"
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 mkdir -p "$TMP_DIR/tools"
@@ -241,7 +241,7 @@ set_progress 1.0
 
 ui_print " "
 ui_print "============================================"
-ui_print "        QuantumROM Flashed Successfully!    "
+ui_print "      Project Revive Flashed Successfully!  "
 ui_print "          Please reboot your tablet!        "
 ui_print "============================================"
 ui_print " "

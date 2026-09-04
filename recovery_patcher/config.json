@@ -1,0 +1,44 @@
+{
+  "stock_recovery_tar": "stock_recovery.tar",
+  "output_tar": "output/Project_Revive_Recovery_v9.tar",
+  "branding": {
+    "ro.lineage.version": "Project-Revive-20260903-gta4xlveu",
+    "ro.lineage.display.version": "Project Revive Recovery v1.0",
+    "ro.build.display.id": "Project Revive Recovery v1.0"
+  },
+  "ui_colors": {
+    "recovery_selected_bg": [255, 255, 255],
+    "recovery_selected_fg": "black",
+    "recovery_unselected_bg": [22, 22, 22],
+    "recovery_info_tags": [255, 32, 0],
+    "fastboot_selected_bg": [255, 32, 0],
+    "fastboot_selected_fg": "black",
+    "fastboot_info_tags": [255, 255, 255]
+  },
+  "assets": {
+    "res/images/logo_image.png": "assets/logo_image.png",
+    "res/images/logo_image_switch.png": "assets/logo_image_switch.png",
+    "res/images/fastbootd.png": "assets/fastbootd.png"
+  },
+  "keys": {
+    "avb_signing_key": "keys/avb_key.pem",
+    "ota_certificates": [
+      "keys/ota_key.x509.pem"
+    ],
+    "zip_entry_datetime": [2026, 9, 3, 14, 40, 34]
+  },
+  "avb": {
+    "partition_name": "recovery",
+    "partition_size": 100663296,
+    "algorithm": "SHA256_RSA4096",
+    "rollback_index": 1,
+    "rollback_index_location": 0,
+    "fingerprint": "samsung/lineage_gta4xlveu/gta4xlveu:16/BP4A.251205.006/eng.daniel:userdebug/release-keys",
+    "salt": "d2c18db4f9997952455808bb33637dc59ff99eb0f2df16ebed5dc0dc6d633a04"
+  },
+  "tar": {
+    "deterministic_mtime": 1788435660,
+    "uname": "nobody",
+    "gname": "nogroup"
+  }
+}

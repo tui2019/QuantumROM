@@ -1,6 +1,6 @@
 ui_print(" ");
 ui_print("============================================");
-ui_print("  QuantumROM Installation");
+ui_print("  Project Revive Installation");
 ui_print("  One UI 8.5 Port for Galaxy Tab S6 Lite (SM-P613)");
 ui_print("============================================");
 ui_print(" ");
@@ -18,7 +18,7 @@ set_progress(0.950000);
 
 ui_print(" ");
 ui_print("============================================");
-ui_print("  QuantumROM Flashed Successfully!");
+ui_print("  Project Revive Flashed Successfully!");
 ui_print("  Please reboot your tablet.");
 ui_print("============================================");
 ui_print(" ");

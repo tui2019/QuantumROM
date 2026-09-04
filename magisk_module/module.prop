@@ -1,0 +1,6 @@
+id=revive_p613_camera_fix
+name=Project Revive SM-P613 Camera & Video Fix
+version=2.0
+versionCode=200
+author=Antigravity
+description=Fixes camera preview black screen (libcore2nativeutil format override) and video mode freeze / mediaserver FORTIFY crash (libstagefright) on SM-P613 ported ROMs.
