@@ -1,13 +1,15 @@
-{
-  "response": [
-    {
-      "datetime": 1788468602,
-      "filename": "ProjectRevive-16.2-20260903-p613.zip",
-      "id": "projectrevive_16.2_20260903",
-      "romtype": "unofficial",
-      "size": 3779338058,
-      "url": "https://downloads.sourceforge.net/project/project-revive/p613/ProjectRevive-16.2-20260903-p613.zip",
-      "version": "16.2"
-    }
-  ]
-}
+[
+  {
+    "datetime": 1788468602,
+    "type": "unofficial",
+    "version": "16.2",
+    "files": [
+      {
+        "filename": "ProjectRevive-16.2-20260903-p613.zip",
+        "url": "https://downloads.sourceforge.net/project/project-revive/p613/ProjectRevive-16.2-20260903-p613.zip",
+        "size": 3779338058,
+        "sha256": "c268492f68a9d7247cc38a8574734f58694b14f188ad547367858571241c0e05"
+      }
+    ]
+  }
+]

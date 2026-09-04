@@ -96,36 +96,53 @@ import json, os
 
 new_entry = {
     "datetime": int("$UNIX_TIMESTAMP"),
-    "filename": "$ZIP_NAME",
-    "id": "projectrevive_${ROM_VERSION}_${DATE_TAG}",
-    "romtype": "unofficial",
-    "size": int("$FILE_SIZE_BYTES"),
-    "url": "$DOWNLOAD_URL",
-    "version": "$ROM_VERSION"
+    "type": "unofficial",
+    "version": "$ROM_VERSION",
+    "files": [
+        {
+            "filename": "$ZIP_NAME",
+            "url": "$DOWNLOAD_URL",
+            "size": int("$FILE_SIZE_BYTES"),
+            "sha256": "$SHA256_SUM"
+        }
+    ]
 }
 
 for ota_file in ["ota/p613.json", "ota/SM-P613.json"]:
     os.makedirs(os.path.dirname(ota_file), exist_ok=True)
-    data = {"response": []}
+    data = []
     if os.path.exists(ota_file):
         try:
             with open(ota_file, "r") as f:
                 loaded = json.load(f)
-                if isinstance(loaded, dict) and "response" in loaded:
+                if isinstance(loaded, list):
                     data = loaded
-                elif isinstance(loaded, list):
-                    data = {"response": loaded}
+                elif isinstance(loaded, dict) and "response" in loaded:
+                    data = []
+                    for item in loaded["response"]:
+                        data.append({
+                            "datetime": item.get("datetime", int("$UNIX_TIMESTAMP")),
+                            "type": item.get("romtype", "unofficial"),
+                            "version": item.get("version", "$ROM_VERSION"),
+                            "files": [
+                                {
+                                    "filename": item.get("filename", ""),
+                                    "url": item.get("url", ""),
+                                    "size": item.get("size", 0),
+                                    "sha256": item.get("sha256", "")
+                                }
+                            ]
+                        })
         except Exception as e:
             print(f"Notice: could not parse existing {ota_file}: {e}")
 
     # Remove existing entry with identical filename if rebuilding/re-uploading
-    filtered = [e for e in data.get("response", []) if e.get("filename") != "$ZIP_NAME"]
+    filtered = [e for e in data if not any(f.get("filename") == "$ZIP_NAME" for f in e.get("files", []))]
     # Prepend newest build to top of array, keeping all older releases intact
     filtered.insert(0, new_entry)
-    data["response"] = filtered
 
     with open(ota_file, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(filtered, f, indent=2)
     print(f"[+] Updated {ota_file} (Total releases in history: {len(filtered)})")
 EOF
 
