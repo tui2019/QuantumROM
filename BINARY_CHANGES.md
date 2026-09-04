@@ -25,46 +25,11 @@ When configuring the preview native surface, Samsung queries `PlatformUtil::getC
 In Exynos builds (SM-P620), Samsung hardcodes `PlatformUtil::getCurrentVendor()` to return `1`. When vendor is `1`, `nativeSetSurfaceFormat` overrides the preview buffer format to `0x11D` (decimal `285` = `HAL_PIXEL_FORMAT_EXYNOS_YCrCb_420_SP_M`).
 On Qualcomm devices (Snapdragon 720G / Adreno 618), format `0x11D` is unsupported by `qdgralloc`, crashing `GraphicBufferAllocator` with `-EINVAL (-22)` on every frame and resulting in a black screen.
 
-Changing `PlatformUtil::getCurrentVendor()` to return `2` (`QCOM`) causes `nativeSetSurfaceFormat` to retain standard format `0x11` (`HAL_PIXEL_FORMAT_YCrCb_420_SP` / NV21), which Qualcomm Adreno supports natively.
-
-### Binary Modifications
-
-#### 64-bit (`system/lib64/libcore2nativeutil.camera.samsung.so`)
-- **Function**: `PlatformUtil::getCurrentVendor()`
-- **Original Disassembly**:
-  ```asm
-  mov w0, #1          ; 20 00 80 52
-  ret                 ; c0 03 5f d6
-  ```
-- **Patched Disassembly**:
-  ```asm
-  mov w0, #2          ; 40 00 80 52
-  ret                 ; c0 03 5f d6
-  ```
-- **One UI 6.1 Offset**: `0x184c4`
-- **Hex Replacement**: `20 00 80 52` -> `40 00 80 52`
-
-#### 32-bit (`system/lib/libcore2nativeutil.camera.samsung.so`)
-- **Function**: `PlatformUtil::getCurrentVendor()`
-- **Original Disassembly**:
-  ```asm
-  movs r0, #1         ; 01 20
-  bx lr               ; 70 47
-  ```
-- **Patched Disassembly**:
-  ```asm
-  movs r0, #2         ; 02 20
-  bx lr               ; 70 47
-  ```
-- **One UI 6.1 Offset**: `0xfaf0`
-- **Hex Replacement**: `01 20` -> `02 20`
-
-### How to Find in Future One UI Versions
-Search for the symbol `PlatformUtil::getCurrentVendor` using `nm -D` or `radare2`:
-```bash
-r2 -q -c "is~getCurrentVendor" libcore2nativeutil.camera.samsung.so
-```
-If symbols are stripped, search for the `nativeSetSurfaceFormat` function which calls `getCurrentVendor` before checking `cmp w0, #1` / `cmp w19, #0x11` / `mov w19, #0x11d`.
+### Solution: Official Snapdragon Binary Drop-in
+Instead of binary-patching the Exynos library, we drop in the official **Qualcomm Snapdragon** build of `libcore2nativeutil.camera.samsung.so` (sourced from the Snapdragon One UI build, e.g. Tab S9 / P613 Snapdragon tree):
+1. **Native Qualcomm Support**: `PlatformUtil::getCurrentVendor()` already returns `2` (`QCOM`) natively without any hex modifications, retaining standard NV21 (`0x11`).
+2. **Adreno OpenCL GPU Acceleration**: Contains the Qualcomm Adreno OpenCL hardware format converter (`FormatConverter`, `clGetDeviceImageInfoQCOM`, `libOpenCL.so`) which was stripped out of the Exynos build, offloading frame conversion to the Adreno GPU.
+3. **Automated Integration**: Staged directly in `QuantumROM/Devices/SM-P613.zip` under `Stock/system/system/lib64/` and `Stock/system/system/lib/`, automatically copied into `${EXTRACTED_FIRM_DIR}` during the build. Zero hex patching is required for `libcore2nativeutil`.
 
 ---
 

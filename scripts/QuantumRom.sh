@@ -1832,11 +1832,7 @@ FIX_CAMERA() {
     fi
 
     if [ "$STOCK_DEVICE_CHIPSET" = "Snapdragon" ]; then
-        echo "- Patching Snapdragon camera and video recording libraries."
-        # Force Qualcomm vendor = 2 in libcore2nativeutil (fixes black preview screen)
-        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib64/libcore2nativeutil.camera.samsung.so" "20008052c0035fd6" "40008052c0035fd6"
-        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib/libcore2nativeutil.camera.samsung.so" "01207047" "02207047"
-
+        echo "- Patching Snapdragon video recording library (libstagefright)."
         # Fix ACodec FORTIFY buffer overflow in libstagefright (fixes video recording freeze)
         HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib64/libstagefright.so" "2100805202408052" "21008052e21f8052"
         HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib/libstagefright.so" "01214ff40072" "01214ff0ff02"
@@ -2078,6 +2074,9 @@ DISABLE_SECURITY() {
         echo "- Disabling stock recovery restoration."
         rm -rf "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p"
     fi
+
+    # Disable Android 16 Trade-In Mode kill trigger
+    find "${EXTRACTED_FIRM_DIR}" -name "tradeinmode.rc" -delete 2>/dev/null || true
 
 	DISABLE_FBE "$EXTRACTED_FIRM_DIR"
 	DISABLE_FDE "$EXTRACTED_FIRM_DIR"
