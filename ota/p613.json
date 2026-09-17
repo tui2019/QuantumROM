@@ -1,5 +1,18 @@
 [
   {
+    "datetime": 1789681147,
+    "type": "unofficial",
+    "version": "16.2",
+    "files": [
+      {
+        "filename": "ProjectRevive-16.2-20260917-p613.zip",
+        "url": "https://downloads.sourceforge.net/project/project-revive/p613/ProjectRevive-16.2-20260917-p613.zip",
+        "size": 3782944492,
+        "sha256": "d4ac957018741e0e3566ebe4c87b78067e8f8fb28644ddcab586c4fe2e3c2917"
+      }
+    ]
+  },
+  {
     "datetime": 1788468602,
     "type": "unofficial",
     "version": "16.2",
