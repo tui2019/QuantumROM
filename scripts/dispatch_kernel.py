@@ -22,7 +22,7 @@ payload = {
     "output_fs": inputs.get("OUTPUT_FILESYSTEM", "erofs"),
     "vendor_repo": inputs.get("VENDOR_REPO", "tui2019/vendor_samsung_gta4xlve"),
     "kernel_repo": inputs.get("KERNEL_REPO", "tui2019/android_kernel_samsung_sm7125"),
-    "publish_release": inputs.get("PUBLISH_RELEASE", "True"),
+    "publish_release": inputs.get("PUBLISH_RELEASE", "False"),
     "compress_img_to_xz": inputs.get("COMPRESS_IMG_TO_XZ", "False"),
     "debloat_rom": inputs.get("DEBLOAT_ROM", "True"),
     "use_ui_8_tethering_apex": inputs.get("USE_UI_8_TETHERING_APEX", "False"),

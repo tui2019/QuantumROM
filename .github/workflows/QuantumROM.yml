@@ -11,7 +11,7 @@ on:
       PUBLISH_RELEASE:
         description: "Publish official release to SourceForge & update OTA? (True/False)"
         required: true
-        default: "True"
+        default: "False"
 
       STOCK_DEVICE:
         description: "STOCK_DEVICE_MODEL (e.g. SM-P613)"
@@ -162,7 +162,7 @@ jobs:
 
           echo "OUTPUT_FILESYSTEM=$OUTPUT_FS" | tee -a "$GITHUB_ENV"
           echo "COMPRESS_IMG_TO_XZ=${{ inputs.COMPRESS_IMG_TO_XZ || github.event.client_payload.compress_img_to_xz || 'False' }}" | tee -a "$GITHUB_ENV"
-          echo "PUBLISH_RELEASE=${{ inputs.PUBLISH_RELEASE || github.event.client_payload.publish_release || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "PUBLISH_RELEASE=${{ inputs.PUBLISH_RELEASE || github.event.client_payload.publish_release || 'False' }}" | tee -a "$GITHUB_ENV"
           echo "BUILD_DATETIME_UTC=$(date +%s)" | tee -a "$GITHUB_ENV"
 
       - name: Validate STOCK_DEVICE - ${{ env.STOCK_DEVICE }}
