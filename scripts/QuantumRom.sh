@@ -1831,12 +1831,8 @@ FIX_CAMERA() {
         fi
     fi
 
-    if [ "$STOCK_DEVICE_CHIPSET" = "Snapdragon" ]; then
-        echo "- Patching Snapdragon video recording library (libstagefright)."
-        # Fix ACodec FORTIFY buffer overflow in libstagefright (fixes video recording freeze)
-        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib64/libstagefright.so" "2100805202408052" "21008052e21f8052"
-        HEX_PATCH "${EXTRACTED_FIRM_DIR}/system/system/lib/libstagefright.so" "01214ff40072" "01214ff0ff02"
-    fi
+    # Note: libstagefright hex patch removed - Qualcomm Codec 2.0 (c2.qti.avc.encoder)
+    # routes video recording through CCodec natively, bypassing legacy ACodec entirely.
 }
 
 

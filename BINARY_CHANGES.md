@@ -33,9 +33,12 @@ Instead of binary-patching the Exynos library, we drop in the official **Qualcom
 
 ---
 
-## 2. Video Mode Fix (Freeze on Video Tab & `mediaserver` Crash)
+## 2. Video Mode Fix (DEPRECATED / OBSOLETE with Qualcomm Codec 2.0)
 
-### Target Files
+> [!NOTE]
+> **No longer required or used.** With the transition to Qualcomm Codec 2.0 (`c2.qti.avc.encoder`), video recording routes natively through Android's `CCodec` (`CCodecBufferChannel`), completely bypassing legacy `ACodec`. `ACodec::reconfigEncoder4OtherApps` is never invoked, allowing `libstagefright.so` to remain 100% stock AOSP/Samsung.
+
+### Target Files (Historical)
 - `system/lib64/libstagefright.so`
 - `system/lib/libstagefright.so`
 
