@@ -104,35 +104,61 @@ jobs:
       - name: Trigger Kernel Workflow
         env:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+          INPUTS_JSON: ${{ toJson(inputs) }}
         run: |
           KERNEL_TARGET_REPO="${{ inputs.KERNEL_REPO }}"
-          echo "🚀 Sending build request to kernel repo: $KERNEL_TARGET_REPO"
+          echo "🚀 Sending build request with all properties to kernel repo: $KERNEL_TARGET_REPO"
+          python3 - <<'EOF'
+import os, json, urllib.request
 
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token $GIT_TOKEN" \
-            "https://api.github.com/repos/$KERNEL_TARGET_REPO/dispatches" \
-            -d "{
-              \"event_type\": \"build-kernel\",
-              \"client_payload\": {
-                \"trigger_rom\": \"true\",
-                \"stock_device\": \"${{ inputs.STOCK_DEVICE }}\",
-                \"target_device\": \"${{ inputs.TARGET_DEVICE }}\",
-                \"target_csc\": \"${{ inputs.TARGET_DEVICE_CSC }}\",
-                \"output_fs\": \"${{ inputs.OUTPUT_FILESYSTEM }}\",
-                \"vendor_repo\": \"${{ inputs.VENDOR_REPO }}\",
-                \"kernel_repo\": \"${{ inputs.KERNEL_REPO }}\",
-                \"publish_release\": \"${{ inputs.PUBLISH_RELEASE }}\"
-              }
-            }")
+git_token = os.environ.get("GIT_TOKEN")
+kernel_repo = os.environ.get("KERNEL_TARGET_REPO")
+inputs = json.loads(os.environ.get("INPUTS_JSON", "{}"))
 
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "✅ Successfully dispatched kernel build! Current VM shutting down to save compute minutes."
-          else
-            echo "❌ Failed to trigger kernel repository dispatch. HTTP Code: $HTTP_CODE"
-            echo "Please check if GIT_TOKEN has 'repo' scope and write permissions."
-            exit 1
-          fi
+payload = {
+    "trigger_rom": "true",
+    "stock_device": inputs.get("STOCK_DEVICE", "SM-P613"),
+    "target_device": inputs.get("TARGET_DEVICE", "SM-P620"),
+    "target_csc": inputs.get("TARGET_DEVICE_CSC", "EUX"),
+    "target_fw_version": inputs.get("TARGET_FW_VERSION", ""),
+    "output_fs": inputs.get("OUTPUT_FILESYSTEM", "erofs"),
+    "vendor_repo": inputs.get("VENDOR_REPO", "tui2019/vendor_samsung_gta4xlve"),
+    "kernel_repo": inputs.get("KERNEL_REPO", "tui2019/android_kernel_samsung_sm7125"),
+    "publish_release": inputs.get("PUBLISH_RELEASE", "True"),
+    "compress_img_to_xz": inputs.get("COMPRESS_IMG_TO_XZ", "False"),
+    "debloat_rom": inputs.get("DEBLOAT_ROM", "True"),
+    "use_ui_8_tethering_apex": inputs.get("USE_UI_8_TETHERING_APEX", "False"),
+    "add_china_smart_manager": inputs.get("ADD_CHINA_SMART_MANAGER", "False"),
+    "add_samsung_flagship_apps": inputs.get("ADD_SAMSUNG_FLAGSHIP_APPS", "False"),
+    "add_custom_features": inputs.get("ADD_CUSTOM_FEATURES", "True"),
+    "patch_flag_secure": inputs.get("PATCH_FLAG_SECURE", "False"),
+    "patch_secure_folder": inputs.get("PATCH_SECURE_FOLDER", "True"),
+    "patch_bluetooth_library": inputs.get("PATCH_BLUETOOTH_LIBRARY", "True"),
+}
+
+body = json.dumps({
+    "event_type": "build-kernel",
+    "client_payload": payload
+}).encode('utf-8')
+
+req = urllib.request.Request(
+    f"https://api.github.com/repos/{kernel_repo}/dispatches",
+    data=body,
+    headers={
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"token {git_token}",
+        "Content-Type": "application/json"
+    }
+)
+
+try:
+    with urllib.request.urlopen(req) as resp:
+        print(f"✅ Successfully dispatched kernel build! HTTP Code: {resp.status}")
+except urllib.error.HTTPError as e:
+    print(f"❌ Failed to trigger kernel repository dispatch. HTTP Code: {e.code}")
+    print(e.read().decode('utf-8', errors='ignore'))
+    exit(1)
+EOF
 
   build_rom:
     name: Build Recovery Flashable ROM
@@ -160,6 +186,7 @@ jobs:
           STOCK_DEV="${{ inputs.STOCK_DEVICE || github.event.client_payload.stock_device || 'SM-P613' }}"
           TARGET_DEV="${{ inputs.TARGET_DEVICE || github.event.client_payload.target_device || 'SM-P620' }}"
           TARGET_CSC="${{ inputs.TARGET_DEVICE_CSC || github.event.client_payload.target_csc || 'EUX' }}"
+          TARGET_FW="${{ inputs.TARGET_FW_VERSION || github.event.client_payload.target_fw_version || '' }}"
           OUTPUT_FS="${{ inputs.OUTPUT_FILESYSTEM || github.event.client_payload.output_fs || 'erofs' }}"
           VENDOR_R="${{ inputs.VENDOR_REPO || github.event.client_payload.vendor_repo || 'tui2019/vendor_samsung_gta4xlve' }}"
           KERNEL_R="${{ inputs.KERNEL_REPO || github.event.client_payload.kernel_repo || 'tui2019/android_kernel_samsung_sm7125' }}"
@@ -167,21 +194,21 @@ jobs:
           echo "STOCK_DEVICE=$STOCK_DEV" | tee -a "$GITHUB_ENV"
           echo "TARGET_DEVICE=$TARGET_DEV" | tee -a "$GITHUB_ENV"
           echo "TARGET_DEVICE_CSC=$TARGET_CSC" | tee -a "$GITHUB_ENV"
-          echo "TARGET_FW_VERSION=${{ inputs.TARGET_FW_VERSION }}" | tee -a "$GITHUB_ENV"
+          echo "TARGET_FW_VERSION=$TARGET_FW" | tee -a "$GITHUB_ENV"
           echo "VENDOR_REPO=$VENDOR_R" | tee -a "$GITHUB_ENV"
           echo "KERNEL_REPO=$KERNEL_R" | tee -a "$GITHUB_ENV"
 
-          echo "DEBLOAT_ROM=${{ inputs.DEBLOAT_ROM || 'True' }}" | tee -a "$GITHUB_ENV"
-          echo "USE_UI_8_TETHERING_APEX=${{ inputs.USE_UI_8_TETHERING_APEX || 'False' }}" | tee -a "$GITHUB_ENV"
-          echo "ADD_CHINA_SMART_MANAGER=${{ inputs.ADD_CHINA_SMART_MANAGER || 'False' }}" | tee -a "$GITHUB_ENV"
-          echo "ADD_SAMSUNG_FLAGSHIP_APPS=${{ inputs.ADD_SAMSUNG_FLAGSHIP_APPS || 'False' }}" | tee -a "$GITHUB_ENV"
-          echo "ADD_CUSTOM_FEATURES=${{ inputs.ADD_CUSTOM_FEATURES || 'True' }}" | tee -a "$GITHUB_ENV"
-          echo "PATCH_FLAG_SECURE=${{ inputs.PATCH_FLAG_SECURE || 'False' }}" | tee -a "$GITHUB_ENV"
-          echo "PATCH_SECURE_FOLDER=${{ inputs.PATCH_SECURE_FOLDER || 'True' }}" | tee -a "$GITHUB_ENV"
-          echo "PATCH_BLUETOOTH_LIBRARY=${{ inputs.PATCH_BLUETOOTH_LIBRARY || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "DEBLOAT_ROM=${{ inputs.DEBLOAT_ROM || github.event.client_payload.debloat_rom || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "USE_UI_8_TETHERING_APEX=${{ inputs.USE_UI_8_TETHERING_APEX || github.event.client_payload.use_ui_8_tethering_apex || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "ADD_CHINA_SMART_MANAGER=${{ inputs.ADD_CHINA_SMART_MANAGER || github.event.client_payload.add_china_smart_manager || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "ADD_SAMSUNG_FLAGSHIP_APPS=${{ inputs.ADD_SAMSUNG_FLAGSHIP_APPS || github.event.client_payload.add_samsung_flagship_apps || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "ADD_CUSTOM_FEATURES=${{ inputs.ADD_CUSTOM_FEATURES || github.event.client_payload.add_custom_features || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "PATCH_FLAG_SECURE=${{ inputs.PATCH_FLAG_SECURE || github.event.client_payload.patch_flag_secure || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "PATCH_SECURE_FOLDER=${{ inputs.PATCH_SECURE_FOLDER || github.event.client_payload.patch_secure_folder || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "PATCH_BLUETOOTH_LIBRARY=${{ inputs.PATCH_BLUETOOTH_LIBRARY || github.event.client_payload.patch_bluetooth_library || 'True' }}" | tee -a "$GITHUB_ENV"
 
           echo "OUTPUT_FILESYSTEM=$OUTPUT_FS" | tee -a "$GITHUB_ENV"
-          echo "COMPRESS_IMG_TO_XZ=${{ inputs.COMPRESS_IMG_TO_XZ || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "COMPRESS_IMG_TO_XZ=${{ inputs.COMPRESS_IMG_TO_XZ || github.event.client_payload.compress_img_to_xz || 'False' }}" | tee -a "$GITHUB_ENV"
           echo "PUBLISH_RELEASE=${{ inputs.PUBLISH_RELEASE || github.event.client_payload.publish_release || 'True' }}" | tee -a "$GITHUB_ENV"
           echo "BUILD_DATETIME_UTC=$(date +%s)" | tee -a "$GITHUB_ENV"
 
