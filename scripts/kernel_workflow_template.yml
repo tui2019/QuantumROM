@@ -110,11 +110,7 @@ jobs:
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            Image.gz-dtb dtbo.img || make -j$(nproc --all) O=out ARCH=arm64 CC=clang \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            Image.gz dtbo.img || make -j$(nproc --all) O=out ARCH=arm64 CC=clang \
+            Image.gz || make -j$(nproc --all) O=out ARCH=arm64 CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- Image
@@ -126,17 +122,10 @@ jobs:
 
           # Copy AnyKernel
           cd "$ANYKERNEL_DIR"
-          if [ -f "$OUT_DIR/arch/arm64/boot/Image.gz-dtb" ]; then
-            cp -f "$OUT_DIR/arch/arm64/boot/Image.gz-dtb" "$ANYKERNEL_DIR/Image.gz-dtb"
-          elif [ -f "$OUT_DIR/arch/arm64/boot/Image.gz" ]; then
+          if [ -f "$OUT_DIR/arch/arm64/boot/Image.gz" ]; then
             cp -f "$OUT_DIR/arch/arm64/boot/Image.gz" "$ANYKERNEL_DIR/Image.gz"
           elif [ -f "$OUT_DIR/arch/arm64/boot/Image" ]; then
             cp -f "$OUT_DIR/arch/arm64/boot/Image" "$ANYKERNEL_DIR/Image"
-          fi
-
-          if [ -f "$OUT_DIR/arch/arm64/boot/dtbo.img" ]; then
-            cp -f "$OUT_DIR/arch/arm64/boot/dtbo.img" "$ANYKERNEL_DIR/dtbo.img"
-            cp -f "$OUT_DIR/arch/arm64/boot/dtbo.img" "$KERNEL_DIR/artifacts/dtbo.img"
           fi
 
           AK3_NAME="AnyKernel3-SM7125-P613-$(date +%Y%m%d).zip"
