@@ -101,6 +101,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && (inputs.BUILD_KERNEL == 'True' || inputs.BUILD_KERNEL == 'true')
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Trigger Kernel Workflow
         env:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
