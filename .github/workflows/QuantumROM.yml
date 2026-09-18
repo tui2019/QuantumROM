@@ -183,6 +183,7 @@ jobs:
           echo "OUTPUT_FILESYSTEM=$OUTPUT_FS" | tee -a "$GITHUB_ENV"
           echo "COMPRESS_IMG_TO_XZ=${{ inputs.COMPRESS_IMG_TO_XZ || 'False' }}" | tee -a "$GITHUB_ENV"
           echo "PUBLISH_RELEASE=${{ inputs.PUBLISH_RELEASE || github.event.client_payload.publish_release || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "BUILD_DATETIME_UTC=$(date +%s)" | tee -a "$GITHUB_ENV"
 
       - name: Validate STOCK_DEVICE - ${{ env.STOCK_DEVICE }}
         run: |
@@ -389,5 +390,6 @@ jobs:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PROJECT: ${{ secrets.SF_PROJECT || 'project-revive' }}
           PUBLISH_RELEASE: ${{ env.PUBLISH_RELEASE }}
+          BUILD_DATETIME_UTC: ${{ env.BUILD_DATETIME_UTC }}
         run: |
           bash release.sh

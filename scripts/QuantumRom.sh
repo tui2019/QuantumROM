@@ -2391,6 +2391,20 @@ APPLY_CUSTOM_FEATURES() {
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.lineage.device" "p613"
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.lineage.build.version" "16.2"
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.lineage.releasetype" "unofficial"
+
+        # Synchronize build date and UTC timestamp for OTA updater and system info
+        local BUILD_UTC="${BUILD_DATETIME_UTC:-$(date +%s)}"
+        local BUILD_DATE="$(date)"
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.build.date.utc" "$BUILD_UTC"
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.build.date" "$BUILD_DATE"
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.system.build.date.utc" "$BUILD_UTC"
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.system.build.date" "$BUILD_DATE"
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "system_ext" "ro.system_ext.build.date.utc" "$BUILD_UTC" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "system_ext" "ro.system_ext.build.date" "$BUILD_DATE" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.build.date.utc" "$BUILD_UTC" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.build.date" "$BUILD_DATE" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.build.date.utc" "$BUILD_UTC" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.build.date" "$BUILD_DATE" 2>/dev/null || true
     fi
 
     # Apply custom floating feature.

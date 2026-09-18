@@ -25,7 +25,7 @@ FILE_SIZE_BYTES=$(stat -c%s "$ZIP_PATH" 2>/dev/null || stat -f%z "$ZIP_PATH")
 FILE_SIZE_HUMAN=$(du -h "$ZIP_PATH" | cut -f1)
 SHA256_SUM=$(sha256sum "$ZIP_PATH" | awk '{print $1}')
 MD5_SUM=$(md5sum "$ZIP_PATH" | awk '{print $1}')
-UNIX_TIMESTAMP=$(date +%s)
+UNIX_TIMESTAMP="${BUILD_DATETIME_UTC:-$(date +%s)}"
 GIT_AUTH_TOKEN="${GIT_TOKEN:-${GH_TOKEN:-}}"
 
 echo "=============================================="
