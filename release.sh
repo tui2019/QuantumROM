@@ -112,50 +112,50 @@ new_entry = {
     ]
 }
 
-for ota_file in ["ota/p613.json", "ota/SM-P613.json"]:
-    os.makedirs(os.path.dirname(ota_file), exist_ok=True)
-    data = []
-    if os.path.exists(ota_file):
-        try:
-            with open(ota_file, "r") as f:
-                loaded = json.load(f)
-                if isinstance(loaded, list):
-                    data = loaded
-                    for item in data:
-                        for f in item.get("files", []):
-                            if "os_sdk_level" not in f:
-                                f["os_sdk_level"] = int("$OS_SDK_LEVEL")
-                            if "os_patch_level" not in f:
-                                f["os_patch_level"] = "$OS_PATCH_LEVEL"
-                elif isinstance(loaded, dict) and "response" in loaded:
-                    data = []
-                    for item in loaded["response"]:
-                        data.append({
-                            "datetime": item.get("datetime", int("$UNIX_TIMESTAMP")),
-                            "type": item.get("romtype", "unofficial"),
-                            "version": item.get("version", "$ROM_VERSION"),
-                            "files": [
-                                {
-                                    "filename": item.get("filename", ""),
-                                    "url": item.get("url", ""),
-                                    "size": item.get("size", 0),
-                                    "sha256": item.get("sha256", ""),
-                                    "os_sdk_level": int("$OS_SDK_LEVEL"),
-                                    "os_patch_level": "$OS_PATCH_LEVEL"
-                                }
-                            ]
-                        })
-        except Exception as e:
-            print(f"Notice: could not parse existing {ota_file}: {e}")
+ota_file = "ota/p613.json"
+os.makedirs(os.path.dirname(ota_file), exist_ok=True)
+data = []
+if os.path.exists(ota_file):
+    try:
+        with open(ota_file, "r") as f:
+            loaded = json.load(f)
+            if isinstance(loaded, list):
+                data = loaded
+                for item in data:
+                    for f in item.get("files", []):
+                        if "os_sdk_level" not in f:
+                            f["os_sdk_level"] = int("$OS_SDK_LEVEL")
+                        if "os_patch_level" not in f:
+                            f["os_patch_level"] = "$OS_PATCH_LEVEL"
+            elif isinstance(loaded, dict) and "response" in loaded:
+                data = []
+                for item in loaded["response"]:
+                    data.append({
+                        "datetime": item.get("datetime", int("$UNIX_TIMESTAMP")),
+                        "type": item.get("romtype", "unofficial"),
+                        "version": item.get("version", "$ROM_VERSION"),
+                        "files": [
+                            {
+                                "filename": item.get("filename", ""),
+                                "url": item.get("url", ""),
+                                "size": item.get("size", 0),
+                                "sha256": item.get("sha256", ""),
+                                "os_sdk_level": int("$OS_SDK_LEVEL"),
+                                "os_patch_level": "$OS_PATCH_LEVEL"
+                            }
+                        ]
+                    })
+    except Exception as e:
+        print(f"Notice: could not parse existing {ota_file}: {e}")
 
-    # Remove existing entry with identical filename if rebuilding/re-uploading
-    filtered = [e for e in data if not any(f.get("filename") == "$ZIP_NAME" for f in e.get("files", []))]
-    # Prepend newest build to top of array, keeping all older releases intact
-    filtered.insert(0, new_entry)
+# Remove existing entry with identical filename if rebuilding/re-uploading
+filtered = [e for e in data if not any(f.get("filename") == "$ZIP_NAME" for f in e.get("files", []))]
+# Prepend newest build to top of array, keeping all older releases intact
+filtered.insert(0, new_entry)
 
-    with open(ota_file, "w") as f:
-        json.dump(filtered, f, indent=2)
-    print(f"[+] Updated {ota_file} (Total releases in history: {len(filtered)})")
+with open(ota_file, "w") as f:
+    json.dump(filtered, f, indent=2)
+print(f"[+] Updated {ota_file} (Total releases in history: {len(filtered)})")
 EOF
 
     # 3. Also sync p613.json to SourceForge for visibility
@@ -170,7 +170,7 @@ EOF
         echo "[*] Committing updated OTA JSON configuration to git..."
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add ota/p613.json ota/SM-P613.json || true
+        git add ota/p613.json || true
         if ! git diff --cached --quiet; then
             git commit -m "chore(ota): release $ZIP_NAME" || true
             for attempt in 1 2 3; do
