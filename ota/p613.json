@@ -1,20 +1,5 @@
 [
   {
-    "datetime": 1789737834,
-    "type": "unofficial",
-    "version": "16.2",
-    "files": [
-      {
-        "filename": "ProjectRevive-16.2-20260918-p613.zip",
-        "url": "https://downloads.sourceforge.net/project/project-revive/p613/ProjectRevive-16.2-20260918-p613.zip",
-        "size": 3783267269,
-        "sha256": "0dea228f370f941090121adb6b8df56e98b91e28890eac897a9df7dc367f2825",
-        "os_sdk_level": 36,
-        "os_patch_level": "2026-07-05"
-      }
-    ]
-  },
-  {
     "datetime": 1789681147,
     "type": "unofficial",
     "version": "16.2",
