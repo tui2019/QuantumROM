@@ -59,7 +59,8 @@ fi
 # ---------------------------------------------------------
 # STEP 2: HANDLE PUBLISH_RELEASE (SourceForge + OTA Config)
 # ---------------------------------------------------------
-if [ "$PUBLISH_RELEASE" = "True" ]; then
+PUBLISH_LOWER=$(echo "$PUBLISH_RELEASE" | tr '[:upper:]' '[:lower:]')
+if [ "$PUBLISH_LOWER" = "true" ] || [ "$PUBLISH_LOWER" = "1" ] || [ "$PUBLISH_LOWER" = "yes" ]; then
     echo ">>> [MODE: OFFICIAL RELEASE] Uploading to SourceForge & updating OTA configuration..."
 
     DOWNLOAD_URL="https://downloads.sourceforge.net/project/${SF_PROJECT}/${SF_DIR_NAME}/${ZIP_NAME}"
@@ -93,6 +94,13 @@ if [ "$PUBLISH_RELEASE" = "True" ]; then
 
     # 2. Update server-side OTA JSON configs
     echo "[*] Updating server-side OTA configuration..."
+    if [ -d ".git" ]; then
+        echo "[*] Ensuring local git branch is up to date before modifying OTA config..."
+        git fetch origin main || true
+        git checkout main 2>/dev/null || git checkout -B main origin/main || true
+        git pull origin main || true
+    fi
+
     python3 - <<EOF
 import json, os
 
@@ -170,12 +178,15 @@ EOF
         echo "[*] Committing updated OTA JSON configuration to git..."
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+        if [ -n "$GIT_AUTH_TOKEN" ] && [ -n "$GITHUB_REPOSITORY" ]; then
+            git remote set-url origin "https://x-access-token:${GIT_AUTH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        fi
         git add ota/p613.json || true
         if ! git diff --cached --quiet; then
             git commit -m "chore(ota): release $ZIP_NAME" || true
             for attempt in 1 2 3; do
                 git pull --rebase origin main || true
-                if git push origin main; then
+                if git push origin HEAD:main; then
                     echo "[+] Successfully pushed updated OTA config to GitHub!"
                     break
                 fi
