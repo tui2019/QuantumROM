@@ -18,20 +18,22 @@ payload = {
     "stock_device": inputs.get("STOCK_DEVICE", "SM-P613"),
     "target_device": inputs.get("TARGET_DEVICE", "SM-P620"),
     "target_csc": inputs.get("TARGET_DEVICE_CSC", "EUX"),
-    "target_fw_version": inputs.get("TARGET_FW_VERSION", ""),
     "output_fs": inputs.get("OUTPUT_FILESYSTEM", "erofs"),
     "vendor_repo": inputs.get("VENDOR_REPO", "tui2019/vendor_samsung_gta4xlve"),
     "kernel_repo": inputs.get("KERNEL_REPO", "tui2019/android_kernel_samsung_sm7125"),
     "publish_release": inputs.get("PUBLISH_RELEASE", "False"),
-    "compress_img_to_xz": inputs.get("COMPRESS_IMG_TO_XZ", "False"),
-    "debloat_rom": inputs.get("DEBLOAT_ROM", "True"),
-    "use_ui_8_tethering_apex": inputs.get("USE_UI_8_TETHERING_APEX", "False"),
-    "add_china_smart_manager": inputs.get("ADD_CHINA_SMART_MANAGER", "False"),
-    "add_samsung_flagship_apps": inputs.get("ADD_SAMSUNG_FLAGSHIP_APPS", "False"),
-    "add_custom_features": inputs.get("ADD_CUSTOM_FEATURES", "True"),
-    "patch_flag_secure": inputs.get("PATCH_FLAG_SECURE", "False"),
-    "patch_secure_folder": inputs.get("PATCH_SECURE_FOLDER", "True"),
-    "patch_bluetooth_library": inputs.get("PATCH_BLUETOOTH_LIBRARY", "True"),
+    "rom_config": {
+        "target_fw_version": inputs.get("TARGET_FW_VERSION", ""),
+        "compress_img_to_xz": inputs.get("COMPRESS_IMG_TO_XZ", "False"),
+        "debloat_rom": inputs.get("DEBLOAT_ROM", "True"),
+        "use_ui_8_tethering_apex": inputs.get("USE_UI_8_TETHERING_APEX", "False"),
+        "add_china_smart_manager": inputs.get("ADD_CHINA_SMART_MANAGER", "False"),
+        "add_samsung_flagship_apps": inputs.get("ADD_SAMSUNG_FLAGSHIP_APPS", "False"),
+        "add_custom_features": inputs.get("ADD_CUSTOM_FEATURES", "True"),
+        "patch_flag_secure": inputs.get("PATCH_FLAG_SECURE", "False"),
+        "patch_secure_folder": inputs.get("PATCH_SECURE_FOLDER", "True"),
+        "patch_bluetooth_library": inputs.get("PATCH_BLUETOOTH_LIBRARY", "True"),
+    }
 }
 
 body = json.dumps({
