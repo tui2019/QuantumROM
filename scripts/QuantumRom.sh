@@ -2971,7 +2971,13 @@ DOWNLOAD_KERNEL_PACKAGE() {
         [ -f "$OUT_DIR"/AnyKernel3*.zip ] && cp -f "$OUT_DIR"/AnyKernel3*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
         [ -f "$OUT_DIR"/legion*.zip ] && cp -f "$OUT_DIR"/legion*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
 
-        # If Image.gz was downloaded and no boot.img exists yet, assemble boot.img using stock device template
+        # Extract Image.gz from AnyKernel zip package if needed
+        if [ ! -f "$OUT_DIR/Image.gz" ] && [ -f "$OUT_DIR/kernel.zip" ]; then
+            echo "[+] Extracting Image.gz from AnyKernel package..."
+            unzip -oq "$OUT_DIR/kernel.zip" "Image.gz" -d "$OUT_DIR" || true
+        fi
+
+        # If Image.gz was downloaded or extracted and no boot.img exists yet, assemble boot.img using stock device template
         if [ -f "$OUT_DIR/Image.gz" ] && [ ! -f "$OUT_DIR/boot.img" ]; then
             local TEMPLATE_DIR="${DEVICES_DIR:-$(pwd)/QuantumROM/Devices}/${STOCK_DEVICE}/boot_template"
             if [ -d "$TEMPLATE_DIR" ] && [ -f "$TEMPLATE_DIR/header.bin" ] && [ -f "$TEMPLATE_DIR/ramdisk.img" ]; then
