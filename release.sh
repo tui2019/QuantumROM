@@ -12,6 +12,8 @@ ROM_VERSION="${ROM_VERSION:-16.2}"
 DATE_TAG="$(date '+%Y%m%d')"
 SF_PROJECT="${SF_PROJECT:-project-revive}"
 SF_DIR_NAME="p613"
+OS_SDK_LEVEL="${OS_SDK_LEVEL:-36}"
+OS_PATCH_LEVEL="${OS_PATCH_LEVEL:-2026-07-05}"
 
 if [ -z "$ZIP_PATH" ] || [ ! -f "$ZIP_PATH" ]; then
     echo "[!] Error: ZIP_PATH '$ZIP_PATH' not found."
@@ -103,7 +105,9 @@ new_entry = {
             "filename": "$ZIP_NAME",
             "url": "$DOWNLOAD_URL",
             "size": int("$FILE_SIZE_BYTES"),
-            "sha256": "$SHA256_SUM"
+            "sha256": "$SHA256_SUM",
+            "os_sdk_level": int("$OS_SDK_LEVEL"),
+            "os_patch_level": "$OS_PATCH_LEVEL"
         }
     ]
 }
@@ -117,6 +121,12 @@ for ota_file in ["ota/p613.json", "ota/SM-P613.json"]:
                 loaded = json.load(f)
                 if isinstance(loaded, list):
                     data = loaded
+                    for item in data:
+                        for f in item.get("files", []):
+                            if "os_sdk_level" not in f:
+                                f["os_sdk_level"] = int("$OS_SDK_LEVEL")
+                            if "os_patch_level" not in f:
+                                f["os_patch_level"] = "$OS_PATCH_LEVEL"
                 elif isinstance(loaded, dict) and "response" in loaded:
                     data = []
                     for item in loaded["response"]:
@@ -129,7 +139,9 @@ for ota_file in ["ota/p613.json", "ota/SM-P613.json"]:
                                     "filename": item.get("filename", ""),
                                     "url": item.get("url", ""),
                                     "size": item.get("size", 0),
-                                    "sha256": item.get("sha256", "")
+                                    "sha256": item.get("sha256", ""),
+                                    "os_sdk_level": int("$OS_SDK_LEVEL"),
+                                    "os_patch_level": "$OS_PATCH_LEVEL"
                                 }
                             ]
                         })
