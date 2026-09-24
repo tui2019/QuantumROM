@@ -534,6 +534,11 @@ DISABLE_FBE() {
         return 1
     fi
 
+    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
+        echo "- Custom vendor integrated: skipping DISABLE_FBE."
+        return 0
+    fi
+
     if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
         return 0
     fi
@@ -557,6 +562,11 @@ DISABLE_FDE() {
     if [ "$#" -ne 1 ]; then
         echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIRECTORY>"
         return 1
+    fi
+
+    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
+        echo "- Custom vendor integrated: skipping DISABLE_FDE."
+        return 0
     fi
 
     if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
@@ -2032,6 +2042,11 @@ REMOVE_TLC_ICC() {
 
     local EXTRACTED_FIRM_DIR="$1"
 
+    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
+        echo "- Custom vendor integrated: skipping REMOVE_TLC_ICC."
+        return 0
+    fi
+
     if [ -d "${EXTRACTED_FIRM_DIR}/vendor" ]; then
         rm -f \
         "${EXTRACTED_FIRM_DIR}/vendor/bin/hw/vendor.samsung.hardware.tlc.iccc@1.0-service" \
@@ -2060,22 +2075,32 @@ DISABLE_SECURITY() {
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.frp.pst" ""
     fi
 
-	if [ -f "${EXTRACTED_FIRM_DIR}/vendor/build.prop" ]; then
-        echo "- Disabling factory reset protection from vendor."
-		BUILD_PROP "$EXTRACTED_FIRM_DIR" "vendor" "ro.frp.pst" ""
+    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" != "1" ]; then
+        if [ -f "${EXTRACTED_FIRM_DIR}/vendor/build.prop" ]; then
+            echo "- Disabling factory reset protection from vendor."
+            BUILD_PROP "$EXTRACTED_FIRM_DIR" "vendor" "ro.frp.pst" ""
+        fi
+
+        if [ -f "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p" ]; then
+            echo "- Disabling stock recovery restoration."
+            rm -rf "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p"
+        fi
+
+        DISABLE_FBE "$EXTRACTED_FIRM_DIR"
+        DISABLE_FDE "$EXTRACTED_FIRM_DIR"
+        REMOVE_TLC_ICC "$EXTRACTED_FIRM_DIR"
+    else
+        echo "- Custom vendor integrated: skipping all vendor modifications in DISABLE_SECURITY."
     fi
 
-    if [ -f "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p" ]; then
-        echo "- Disabling stock recovery restoration."
-        rm -rf "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p"
+    # Disable Android 16 Trade-In Mode kill trigger (skip vendor if custom)
+    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
+        for part_dir in system product system_ext odm optics; do
+            [ -d "${EXTRACTED_FIRM_DIR}/$part_dir" ] && find "${EXTRACTED_FIRM_DIR}/$part_dir" -name "tradeinmode.rc" -delete 2>/dev/null || true
+        done
+    else
+        find "${EXTRACTED_FIRM_DIR}" -name "tradeinmode.rc" -delete 2>/dev/null || true
     fi
-
-    # Disable Android 16 Trade-In Mode kill trigger
-    find "${EXTRACTED_FIRM_DIR}" -name "tradeinmode.rc" -delete 2>/dev/null || true
-
-	DISABLE_FBE "$EXTRACTED_FIRM_DIR"
-	DISABLE_FDE "$EXTRACTED_FIRM_DIR"
-	REMOVE_TLC_ICC "$EXTRACTED_FIRM_DIR"
 }
 
 
@@ -2661,36 +2686,41 @@ BUILD_IMG() {
 
     build_img() {
         local PARTITION="$1"
-
-        mkdir -p "${EXTRACTED_FIRM_DIR}/${PARTITION}/lost+found"
-
-        GEN_FS_CONFIG "$EXTRACTED_FIRM_DIR" "$PARTITION"
-        GEN_FILE_CONTEXTS "$EXTRACTED_FIRM_DIR" "$PARTITION"
-
         local SOURCE_DIR="${EXTRACTED_FIRM_DIR}/$PARTITION"
         local OUT_IMG="$OUT_DIR/${PARTITION}.img"
         local FS_CONFIG="${EXTRACTED_FIRM_DIR}/config/${PARTITION}_fs_config"
         local FILE_CONTEXTS="${EXTRACTED_FIRM_DIR}/config/${PARTITION}_file_contexts"
+        local MOUNT_POINT="/$PARTITION"
 
         [[ -d "$SOURCE_DIR" ]] || return
 
+        if [ "$PARTITION" = "vendor" ] && [ -f "$FS_CONFIG" ] && [ -f "$FILE_CONTEXTS" ]; then
+            echo "=============================================="
+            echo " Packing vendor directly as-is (no modifying) "
+            echo "=============================================="
+        else
+            mkdir -p "${EXTRACTED_FIRM_DIR}/${PARTITION}/lost+found"
+
+            GEN_FS_CONFIG "$EXTRACTED_FIRM_DIR" "$PARTITION"
+            GEN_FILE_CONTEXTS "$EXTRACTED_FIRM_DIR" "$PARTITION"
+
+            [[ -f "$FS_CONFIG" ]] || {
+                echo -e "Warning: $FS_CONFIG missing, skipping $PARTITION"
+                return
+            }
+
+            [[ -f "$FILE_CONTEXTS" ]] || {
+                echo -e "Warning: $FILE_CONTEXTS missing, skipping $PARTITION"
+                return
+            }
+
+            sort -u "$FILE_CONTEXTS" -o "$FILE_CONTEXTS"
+            sort -u "$FS_CONFIG" -o "$FS_CONFIG"
+        fi
+
         local EXTRACTED_SIZE=$(du -sb --apparent-size "$SOURCE_DIR" | cut -f1)
-        local MOUNT_POINT="/$PARTITION"
 
         rm -rf "$OUT_IMG"
-
-        [[ -f "$FS_CONFIG" ]] || {
-            echo -e "Warning: $FS_CONFIG missing, skipping $PARTITION"
-            return
-        }
-
-        [[ -f "$FILE_CONTEXTS" ]] || {
-            echo -e "Warning: $FILE_CONTEXTS missing, skipping $PARTITION"
-            return
-        }
-
-        sort -u "$FILE_CONTEXTS" -o "$FILE_CONTEXTS"
-        sort -u "$FS_CONFIG" -o "$FS_CONFIG"
 
         if [[ "$FILE_SYSTEM" == "erofs" ]]; then
             echo " "
@@ -2766,6 +2796,16 @@ BUILD_IMG() {
         else
             echo -e "- Unsupported filesystem: $FILE_SYSTEM"
             return
+        fi
+
+        if [ "$PARTITION" = "vendor" ] && [ -f "${EXTRACTED_FIRM_DIR}/config/vendor_size.txt" ]; then
+            local PARTITION_MAX_SIZE=$(tr -d '[:space:]' < "${EXTRACTED_FIRM_DIR}/config/vendor_size.txt")
+            local IMG_SIZE=$(stat -c%s "$OUT_IMG" 2>/dev/null || stat -f%z "$OUT_IMG")
+            echo "[+] Built vendor.img: $IMG_SIZE bytes (partition limit: $PARTITION_MAX_SIZE bytes)"
+            if [ -n "$PARTITION_MAX_SIZE" ] && [ "$IMG_SIZE" -gt "$PARTITION_MAX_SIZE" ]; then
+                echo "[-] Error: vendor.img size ($IMG_SIZE bytes) exceeds partition limit ($PARTITION_MAX_SIZE bytes)!"
+                return 1
+            fi
         fi
     }
 
@@ -2885,7 +2925,7 @@ INTEGRATE_CUSTOM_VENDOR() {
     mkdir -p "${EXTRACTED_FIRM_DIR}/vendor"
 
     if [ -d "$VENDOR_SRC_DIR/vendor" ]; then
-        echo "[+] Copying from $VENDOR_SRC_DIR/vendor..."
+        echo "[+] Copying vendor directory contents from $VENDOR_SRC_DIR/vendor..."
         cp -a "$VENDOR_SRC_DIR/vendor/." "${EXTRACTED_FIRM_DIR}/vendor/"
     else
         echo "[+] Copying vendor root contents..."
@@ -2898,6 +2938,7 @@ INTEGRATE_CUSTOM_VENDOR() {
         mkdir -p "${EXTRACTED_FIRM_DIR}/config"
         [ -f "$VENDOR_SRC_DIR/config/vendor_fs_config" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config"
         [ -f "$VENDOR_SRC_DIR/config/vendor_file_contexts" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_file_contexts" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
+        [ -f "$VENDOR_SRC_DIR/config/vendor_size.txt" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_size.txt" "${EXTRACTED_FIRM_DIR}/config/vendor_size.txt"
         [ -f "$VENDOR_SRC_DIR/config/odm_fs_config" ] && cp -f "$VENDOR_SRC_DIR/config/odm_fs_config" "${EXTRACTED_FIRM_DIR}/config/odm_fs_config"
         [ -f "$VENDOR_SRC_DIR/config/odm_file_contexts" ] && cp -f "$VENDOR_SRC_DIR/config/odm_file_contexts" "${EXTRACTED_FIRM_DIR}/config/odm_file_contexts"
     else
@@ -2905,15 +2946,9 @@ INTEGRATE_CUSTOM_VENDOR() {
         rm -f "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
     fi
 
-    # Clean non-vendor artifacts
+    # Clean non-vendor artifacts if copied from root
     rm -rf "${EXTRACTED_FIRM_DIR}/vendor/config"
     rm -rf "${EXTRACTED_FIRM_DIR}/vendor/.git" "${EXTRACTED_FIRM_DIR}/vendor/.github"
-
-    # Ensure critical Qualcomm mountpoint folders exist in vendor
-    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/firmware_mnt"
-    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/firmware-modem"
-    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/bt_firmware"
-    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor/dsp"
 
     if [ -d "$VENDOR_SRC_DIR/odm" ]; then
         echo "[+] Copying custom ODM..."
@@ -2929,7 +2964,8 @@ INTEGRATE_CUSTOM_VENDOR() {
         echo "ro.odm.build.version.release=16" > "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
     fi
 
-    echo "Custom vendor integration complete."
+    export CUSTOM_VENDOR_INTEGRATED=1
+    echo "Custom vendor integration complete. Vendor partition will be packed as-is without modifications."
 }
 
 
@@ -2968,8 +3004,11 @@ DOWNLOAD_KERNEL_PACKAGE() {
         done
 
         # Standardize names
-        [ -f "$OUT_DIR"/AnyKernel3*.zip ] && cp -f "$OUT_DIR"/AnyKernel3*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
-        [ -f "$OUT_DIR"/legion*.zip ] && cp -f "$OUT_DIR"/legion*.zip "$OUT_DIR/kernel.zip" 2>/dev/null || true
+        local LATEST_KERNEL_ZIP=$(ls -1t "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | head -n1)
+        if [ -n "$LATEST_KERNEL_ZIP" ] && [ -f "$LATEST_KERNEL_ZIP" ]; then
+            echo "[+] Selected newest kernel package: $(basename "$LATEST_KERNEL_ZIP")"
+            cp -f "$LATEST_KERNEL_ZIP" "$OUT_DIR/kernel.zip"
+        fi
 
         # Extract Image.gz from AnyKernel zip package if needed
         if [ ! -f "$OUT_DIR/Image.gz" ] && [ -f "$OUT_DIR/kernel.zip" ]; then

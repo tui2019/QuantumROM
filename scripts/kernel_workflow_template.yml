@@ -47,7 +47,7 @@ jobs:
           TARGET_DEV="${{ github.event.client_payload.target_device || 'SM-P620' }}"
           TARGET_CSC="${{ github.event.client_payload.target_csc || 'EUX' }}"
           OUTPUT_FS="${{ github.event.client_payload.output_fs || 'erofs' }}"
-          VENDOR_R="${{ github.event.client_payload.vendor_repo || 'tui2019/vendor_samsung_gta4xlve' }}"
+          VENDOR_R="${{ github.event.client_payload.vendor_repo || 'tui2019/android_vendor_samsung_gta4xlvewifi' }}"
           KERNEL_R="${{ github.event.client_payload.kernel_repo || 'tui2019/android_kernel_samsung_sm7125' }}"
 
           echo "TRIGGER_ROM=$TRIGGER_ROM" >> $GITHUB_ENV

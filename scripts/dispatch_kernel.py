@@ -19,7 +19,7 @@ payload = {
     "target_device": inputs.get("TARGET_DEVICE", "SM-P620"),
     "target_csc": inputs.get("TARGET_DEVICE_CSC", "EUX"),
     "output_fs": inputs.get("OUTPUT_FILESYSTEM", "erofs"),
-    "vendor_repo": inputs.get("VENDOR_REPO", "tui2019/vendor_samsung_gta4xlve"),
+    "vendor_repo": inputs.get("VENDOR_REPO", "tui2019/android_vendor_samsung_gta4xlvewifi"),
     "kernel_repo": inputs.get("KERNEL_REPO", "tui2019/android_kernel_samsung_sm7125"),
     "publish_release": inputs.get("PUBLISH_RELEASE", "False"),
     "rom_config": {

@@ -35,7 +35,7 @@ on:
       VENDOR_REPO:
         description: "Custom Vendor repository (owner/repo)"
         required: false
-        default: "tui2019/vendor_samsung_gta4xlve"
+        default: "tui2019/android_vendor_samsung_gta4xlvewifi"
 
       KERNEL_REPO:
         description: "Kernel repository (owner/repo)"
@@ -141,7 +141,7 @@ jobs:
           TARGET_CSC="${{ inputs.TARGET_DEVICE_CSC || github.event.client_payload.target_csc || 'EUX' }}"
           TARGET_FW="${{ inputs.TARGET_FW_VERSION || github.event.client_payload.rom_config.target_fw_version || github.event.client_payload.target_fw_version || '' }}"
           OUTPUT_FS="${{ inputs.OUTPUT_FILESYSTEM || github.event.client_payload.output_fs || 'erofs' }}"
-          VENDOR_R="${{ inputs.VENDOR_REPO || github.event.client_payload.vendor_repo || 'tui2019/vendor_samsung_gta4xlve' }}"
+          VENDOR_R="${{ inputs.VENDOR_REPO || github.event.client_payload.vendor_repo || 'tui2019/android_vendor_samsung_gta4xlvewifi' }}"
           KERNEL_R="${{ inputs.KERNEL_REPO || github.event.client_payload.kernel_repo || 'tui2019/android_kernel_samsung_sm7125' }}"
 
           echo "STOCK_DEVICE=$STOCK_DEV" | tee -a "$GITHUB_ENV"
@@ -232,16 +232,17 @@ jobs:
           source "$(pwd)/scripts/QuantumRom.sh"
           echo "Cloning vendor repository: $VENDOR_REPO..."
           rm -rf /tmp/vendor_src
-          if [ -n "$GIT_TOKEN" ]; then
-            git clone --depth=1 "https://${GIT_TOKEN}@github.com/${VENDOR_REPO}.git" /tmp/vendor_src || {
-              echo "[-] Warning: Failed to clone vendor repo, skipping custom vendor step."
-            }
-          else
-            git clone --depth=1 "https://github.com/${VENDOR_REPO}.git" /tmp/vendor_src || true
-          fi
+          git clone --depth=1 "https://github.com/${VENDOR_REPO}.git" /tmp/vendor_src || {
+            if [ -n "$GIT_TOKEN" ]; then
+              git clone --depth=1 "https://${GIT_TOKEN}@github.com/${VENDOR_REPO}.git" /tmp/vendor_src
+            fi
+          }
 
           if [ -d /tmp/vendor_src ]; then
             INTEGRATE_CUSTOM_VENDOR "/tmp/vendor_src" "$FIRM_DIR/$TARGET_DEVICE"
+          else
+            echo "[-] Error: Failed to clone vendor repo $VENDOR_REPO!"
+            exit 1
           fi
 
       - name: Fetch Kernel Package ▶️ ${{ env.KERNEL_REPO }}
