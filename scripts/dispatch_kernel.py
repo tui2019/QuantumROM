@@ -26,7 +26,7 @@ payload = {
         "target_fw_version": inputs.get("TARGET_FW_VERSION", ""),
         "compress_img_to_xz": inputs.get("COMPRESS_IMG_TO_XZ", "False"),
         "debloat_rom": inputs.get("DEBLOAT_ROM", "True"),
-        "debloat_samsung_bixby": inputs.get("DEBLOAT_SAMSUNG_BIXBY", "False"),
+        "debloat_samsung_bixby": inputs.get("DEBLOAT_SAMSUNG_BIXBY", "True"),
         "debloat_samsung_dex": inputs.get("DEBLOAT_SAMSUNG_DEX", "False"),
         "use_ui_8_tethering_apex": inputs.get("USE_UI_8_TETHERING_APEX", "False"),
         "add_china_smart_manager": inputs.get("ADD_CHINA_SMART_MANAGER", "False"),
