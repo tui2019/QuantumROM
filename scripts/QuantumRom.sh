@@ -526,64 +526,6 @@ EXTRACT_FIRMWARE_IMG() {
 }
 
 
-DISABLE_FBE() {
-    local EXTRACTED_FIRM_DIR="$1"
-
-    if [ "$#" -ne 1 ]; then
-        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIRECTORY>"
-        return 1
-    fi
-
-    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
-        echo "- Custom vendor integrated: skipping DISABLE_FBE."
-        return 0
-    fi
-
-    if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
-        return 0
-    fi
-
-    local fstab_files=$(grep -lr 'fileencryption' "${EXTRACTED_FIRM_DIR}/vendor/etc" 2>/dev/null)
-
-    for i in $fstab_files; do
-        if [ -f "$i" ]; then
-            echo -e "- Disabling file-based encryption (FBE) for /data."
-            echo -e "- Found $i."
-            sed -i -e 's/^\([^#].*\)fileencryption=[^,]*\(.*\)$/# &\n\1encryptable\2/g' "$i"
-        fi
-    done
-    return 0
-}
-
-
-DISABLE_FDE() {
-    local EXTRACTED_FIRM_DIR="$1"
-
-    if [ "$#" -ne 1 ]; then
-        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIRECTORY>"
-        return 1
-    fi
-
-    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
-        echo "- Custom vendor integrated: skipping DISABLE_FDE."
-        return 0
-    fi
-
-    if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
-        return 0
-    fi
-
-    local fstab_files=$(grep -lr 'forceencrypt' "${EXTRACTED_FIRM_DIR}/vendor/etc" 2>/dev/null)
-
-    for i in $fstab_files; do
-        if [ -f "$i" ]; then
-            echo -e "- Disabling full-disk encryption (FDE) for /data..."
-            echo -e "- Found $i."
-            sed -i -e 's/^\([^#].*\)forceencrypt=[^,]*\(.*\)$/# &\n\1encryptable\2/g' "$i"
-        fi
-    done
-    return 0
-}
 
 
 INSTALL_FRAMEWORK() {
@@ -2034,30 +1976,6 @@ BUILD_PROP() {
 }
 
 
-REMOVE_TLC_ICC() {
-    if [ "$#" -ne 1 ]; then
-        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
-        return 1
-    fi
-
-    local EXTRACTED_FIRM_DIR="$1"
-
-    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
-        echo "- Custom vendor integrated: skipping REMOVE_TLC_ICC."
-        return 0
-    fi
-
-    if [ -d "${EXTRACTED_FIRM_DIR}/vendor" ]; then
-        rm -f \
-        "${EXTRACTED_FIRM_DIR}/vendor/bin/hw/vendor.samsung.hardware.tlc.iccc@1.0-service" \
-        "${EXTRACTED_FIRM_DIR}/vendor/etc/init/vendor.samsung.hardware.tlc.iccc@1.0-service.rc" \
-        "${EXTRACTED_FIRM_DIR}/vendor/etc/vintf/manifest/vendor.samsung.hardware.tlc.iccc@1.0-manifest.xml" \
-        "${EXTRACTED_FIRM_DIR}/vendor/lib64/vendor.samsung.hardware.tlc.iccc@1.0-impl.so" \
-        "${EXTRACTED_FIRM_DIR}/vendor/lib64/vendor.samsung.hardware.tlc.iccc@1.0.so"
-    fi
-}
-
-
 DISABLE_SECURITY() {
     echo " "
 
@@ -2075,32 +1993,10 @@ DISABLE_SECURITY() {
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.frp.pst" ""
     fi
 
-    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" != "1" ]; then
-        if [ -f "${EXTRACTED_FIRM_DIR}/vendor/build.prop" ]; then
-            echo "- Disabling factory reset protection from vendor."
-            BUILD_PROP "$EXTRACTED_FIRM_DIR" "vendor" "ro.frp.pst" ""
-        fi
-
-        if [ -f "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p" ]; then
-            echo "- Disabling stock recovery restoration."
-            rm -rf "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p"
-        fi
-
-        DISABLE_FBE "$EXTRACTED_FIRM_DIR"
-        DISABLE_FDE "$EXTRACTED_FIRM_DIR"
-        REMOVE_TLC_ICC "$EXTRACTED_FIRM_DIR"
-    else
-        echo "- Custom vendor integrated: skipping all vendor modifications in DISABLE_SECURITY."
-    fi
-
-    # Disable Android 16 Trade-In Mode kill trigger (skip vendor if custom)
-    if [ "${CUSTOM_VENDOR_INTEGRATED:-0}" = "1" ]; then
-        for part_dir in system product system_ext odm optics; do
-            [ -d "${EXTRACTED_FIRM_DIR}/$part_dir" ] && find "${EXTRACTED_FIRM_DIR}/$part_dir" -name "tradeinmode.rc" -delete 2>/dev/null || true
-        done
-    else
-        find "${EXTRACTED_FIRM_DIR}" -name "tradeinmode.rc" -delete 2>/dev/null || true
-    fi
+    # Disable Android 16 Trade-In Mode kill trigger
+    for part_dir in system product system_ext odm optics; do
+        [ -d "${EXTRACTED_FIRM_DIR}/$part_dir" ] && find "${EXTRACTED_FIRM_DIR}/$part_dir" -name "tradeinmode.rc" -delete 2>/dev/null || true
+    done
 }
 
 
