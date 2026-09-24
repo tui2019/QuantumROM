@@ -2640,6 +2640,29 @@ BUILD_IMG() {
             echo "=============================================="
             echo " Packing vendor directly as-is (no modifying) "
             echo "=============================================="
+
+            # Purge any remaining VCS artifacts (.gitkeep, .gitignore)
+            find "$SOURCE_DIR" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+
+            # Ensure any files/dirs on disk missing from FS_CONFIG are appended so mkfs.erofs will not fail
+            local TMP_EXISTING="$(mktemp)"
+            awk '{print $1}' "$FS_CONFIG" > "$TMP_EXISTING"
+            find "$SOURCE_DIR" -mindepth 1 \( -type f -o -type d -o -type l \) | while IFS= read -r item; do
+                local REL_PATH="${item#${EXTRACTED_FIRM_DIR}/$PARTITION/}"
+                local PATH_ENTRY="$PARTITION/$REL_PATH"
+                grep -qxF "$PATH_ENTRY" "$TMP_EXISTING" && continue
+                if [ -d "$item" ]; then
+                    echo "- Appending missing directory to vendor fs_config: $PATH_ENTRY"
+                    printf "%s 0 0 0755\n" "$PATH_ENTRY" >> "$FS_CONFIG"
+                elif [[ "$REL_PATH" == */bin/* ]]; then
+                    echo "- Appending missing binary to vendor fs_config: $PATH_ENTRY"
+                    printf "%s 0 2000 0755\n" "$PATH_ENTRY" >> "$FS_CONFIG"
+                else
+                    echo "- Appending missing file to vendor fs_config: $PATH_ENTRY"
+                    printf "%s 0 0 0644\n" "$PATH_ENTRY" >> "$FS_CONFIG"
+                fi
+            done
+            rm -f "$TMP_EXISTING"
         else
             mkdir -p "${EXTRACTED_FIRM_DIR}/${PARTITION}/lost+found"
 
@@ -2888,16 +2911,17 @@ INTEGRATE_CUSTOM_VENDOR() {
         rm -f "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
     fi
 
-    # Clean non-vendor artifacts if copied from root
+    # Clean non-vendor artifacts and VCS metadata (.git, .github, .gitkeep, .gitignore)
     rm -rf "${EXTRACTED_FIRM_DIR}/vendor/config"
-    rm -rf "${EXTRACTED_FIRM_DIR}/vendor/.git" "${EXTRACTED_FIRM_DIR}/vendor/.github"
+    find "${EXTRACTED_FIRM_DIR}/vendor" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
 
     if [ -d "$VENDOR_SRC_DIR/odm" ]; then
         echo "[+] Copying custom ODM..."
         rm -rf "${EXTRACTED_FIRM_DIR}/odm"
         mkdir -p "${EXTRACTED_FIRM_DIR}/odm"
         cp -a "$VENDOR_SRC_DIR/odm/." "${EXTRACTED_FIRM_DIR}/odm/"
-        rm -rf "${EXTRACTED_FIRM_DIR}/odm/.git" "${EXTRACTED_FIRM_DIR}/odm/.github" "${EXTRACTED_FIRM_DIR}/odm/config"
+        find "${EXTRACTED_FIRM_DIR}/odm" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+        rm -rf "${EXTRACTED_FIRM_DIR}/odm/config"
     fi
 
     # Ensure minimal odm exists for dynamic partition early mount
