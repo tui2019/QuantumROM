@@ -57,6 +57,16 @@ on:
         required: true
         default: "True"
 
+      DEBLOAT_SAMSUNG_BIXBY:
+        description: "Debloat Samsung Bixby apps (True/False)"
+        required: true
+        default: "False"
+
+      DEBLOAT_SAMSUNG_DEX:
+        description: "Debloat Samsung DeX apps (True/False)"
+        required: true
+        default: "False"
+
       USE_UI_8_TETHERING_APEX:
         description: "Set True if your kernel BPF version is 5.4 (lower than 5.10)."
         required: true
@@ -152,6 +162,8 @@ jobs:
           echo "KERNEL_REPO=$KERNEL_R" | tee -a "$GITHUB_ENV"
 
           echo "DEBLOAT_ROM=${{ inputs.DEBLOAT_ROM || github.event.client_payload.rom_config.debloat_rom || github.event.client_payload.debloat_rom || 'True' }}" | tee -a "$GITHUB_ENV"
+          echo "DEBLOAT_SAMSUNG_BIXBY=${{ inputs.DEBLOAT_SAMSUNG_BIXBY || github.event.client_payload.rom_config.debloat_samsung_bixby || github.event.client_payload.debloat_samsung_bixby || 'False' }}" | tee -a "$GITHUB_ENV"
+          echo "DEBLOAT_SAMSUNG_DEX=${{ inputs.DEBLOAT_SAMSUNG_DEX || github.event.client_payload.rom_config.debloat_samsung_dex || github.event.client_payload.debloat_samsung_dex || 'False' }}" | tee -a "$GITHUB_ENV"
           echo "USE_UI_8_TETHERING_APEX=${{ inputs.USE_UI_8_TETHERING_APEX || github.event.client_payload.rom_config.use_ui_8_tethering_apex || github.event.client_payload.use_ui_8_tethering_apex || 'False' }}" | tee -a "$GITHUB_ENV"
           echo "ADD_CHINA_SMART_MANAGER=${{ inputs.ADD_CHINA_SMART_MANAGER || github.event.client_payload.rom_config.add_china_smart_manager || github.event.client_payload.add_china_smart_manager || 'False' }}" | tee -a "$GITHUB_ENV"
           echo "ADD_SAMSUNG_FLAGSHIP_APPS=${{ inputs.ADD_SAMSUNG_FLAGSHIP_APPS || github.event.client_payload.rom_config.add_samsung_flagship_apps || github.event.client_payload.add_samsung_flagship_apps || 'False' }}" | tee -a "$GITHUB_ENV"
@@ -262,8 +274,14 @@ jobs:
           source "$(pwd)/scripts/debloat.sh"
           source "$(pwd)/scripts/QuantumRom.sh"
 
-          if [ "$DEBLOAT_ROM" = "True" ]; then
+          if [ "$DEBLOAT_ROM" = "True" ] || [ "$DEBLOAT_ROM" = "true" ]; then
               DEBLOAT "$FIRM_DIR/$TARGET_DEVICE"
+          fi
+          if [ "$DEBLOAT_SAMSUNG_BIXBY" = "True" ] || [ "$DEBLOAT_SAMSUNG_BIXBY" = "true" ]; then
+              DEBLOAT_SAMSUNG_BIXBY_APPS "$FIRM_DIR/$TARGET_DEVICE"
+          fi
+          if [ "$DEBLOAT_SAMSUNG_DEX" = "True" ] || [ "$DEBLOAT_SAMSUNG_DEX" = "true" ]; then
+              DEBLOAT_SAMSUNG_DEX_APPS "$FIRM_DIR/$TARGET_DEVICE"
           fi
 
       - name: Apply stock device configuration

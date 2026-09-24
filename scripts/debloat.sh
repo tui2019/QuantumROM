@@ -6,14 +6,14 @@ DEBLOAT_APPS=(
 "HMT" "PaymentFramework" "DigitalWellbeing" "FactoryCameraFB"
 "WlanTest" "AirGlance" "AirReadingGlass" "AndroidGlassesCore"
 "SOAgent77" "ARCore" "ARDrawing" "ARZone" "BGMProvider"
-"SingleTakeService" "BixbyWakeup" "BlockchainBasicKit"
+"SingleTakeService" "BlockchainBasicKit"
 "Cameralyzer" "DictDiotekForSec" "EasymodeContactsWidget81"
 "Fast" "FunModeSDK" "GearManagerStub" "KidsHome_Installer"
 "LinkSharing_v11" "LiveDrawing" "MAPSAgent" "MdecService"
 "MinusOnePage" "MoccaMobile" "Netflix_stub" "Notes40"
 "ParentalCare" "PhotoTable" "SmartReminder" "SmartSwitchStub"
 "UnifiedWFC" "UniversalMDMClient" "VideoEditorLite_Dream_N"
-"VisionIntelligence3.7" "VoiceAccess" "VTCameraSetting"
+"VoiceAccess" "VTCameraSetting"
 "WebManual" "WifiGuider" "AutomationTest_FB" "FactoryTestProvider"
 "StickerCenter" "CIDManager" "FacAtFunction" "serviceModeApp_FB"
 )
@@ -48,13 +48,24 @@ SAMSUNG_APPS=(
 )
 
 
+# SAMSUNG DEX APPS
+SAMSUNG_DEX_APPS=(
+"DeXonPC" "DesktopModeUiService" "KnoxDesktopLauncher"
+"SystemUIDesktop" "DexCommunity" "KnoxContainerDesktop"
+)
+
+
+# SAMSUNG BIXBY APPS
+SAMSUNG_BIXBY_APPS=(
+"BixbyWakeup" "BixbyInterpreter" "VisionIntelligence3.7" "Bixby" "BixbyService"
+"BixbyVisionFramework3.5" "SystemUIBixby2" "VisionModel-Stub" "SettingsBixby"
+)
+
+
 # SAMSUNG AI / SMART
 SAMSUNG_AI=(
-"LiveTranscribe" "Bixby" "BixbyInterpreter"
-"BixbyVisionFramework3.5" "SettingsBixby"
-"SmartEye" "SmartPush" "SmartPush_64"
-"SmartThingsKit" "SmartTouchCall"
-"VisionIntelligence3.7"
+"LiveTranscribe" "SmartEye" "SmartPush"
+"SmartPush_64" "SmartThingsKit" "SmartTouchCall"
 )
 
 
@@ -179,6 +190,44 @@ KICK() {
             fi
         done
     done
+}
+
+
+DEBLOAT_SAMSUNG_BIXBY_APPS() {
+    echo -e ""
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+	local EXTRACTED_FIRM_DIR="$1"
+
+	if [ ! -d "$EXTRACTED_FIRM_DIR/system" ]; then
+	    echo -e "No extracted firmware found."
+        return 1
+    fi
+
+    echo -e "Debloating Samsung Bixby apps."
+    KICK "$EXTRACTED_FIRM_DIR" "${SAMSUNG_BIXBY_APPS[@]}"
+}
+
+
+DEBLOAT_SAMSUNG_DEX_APPS() {
+    echo -e ""
+    if [ "$#" -ne 1 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+	local EXTRACTED_FIRM_DIR="$1"
+
+	if [ ! -d "$EXTRACTED_FIRM_DIR/system" ]; then
+	    echo -e "No extracted firmware found."
+        return 1
+    fi
+
+    echo -e "Debloating Samsung DeX apps."
+    KICK "$EXTRACTED_FIRM_DIR" "${SAMSUNG_DEX_APPS[@]}"
 }
 
 

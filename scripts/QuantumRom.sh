@@ -30,6 +30,56 @@ source "$(pwd)/scripts/debloat.sh"
 source "$(pwd)/scripts/git_utils.sh"
 
 
+WGET_DOWNLOAD() {
+    local URL="$1"
+    local OUT_DIR="$2"
+
+    if [ -z "$URL" ] || [ -z "$OUT_DIR" ]; then
+        echo "Usage: WGET_DOWNLOAD <URL> <OUTPUT_DIRECTORY>"
+        return 1
+    fi
+
+    mkdir -p "$OUT_DIR" || {
+        echo "- Failed to create output directory: $OUT_DIR"
+        return 1
+    }
+
+    local FILE=$(basename "${URL%%\?*}")
+    local OUT="$OUT_DIR/$FILE"
+
+    if ! wget --spider -q "$URL"; then
+        echo "- File is not downloadable: $URL"
+        return 1
+    fi
+
+    echo "- Downloading: $FILE"
+
+    wget --no-check-certificate -q -O "$OUT" "$URL" &
+    local PID=$!
+
+    local SPINNER='|/-\'
+    local i=0
+
+    while kill -0 "$PID" 2>/dev/null; do
+        printf '\r- Downloading... %s' "${SPINNER:i++%4:1}"
+        sleep 0.2
+    done
+
+    wait "$PID"
+    local STATUS=$?
+
+    if [ "$STATUS" -ne 0 ]; then
+        echo ""
+        echo "- Download failed"
+        rm -f "$OUT"
+        return 1
+    fi
+
+    printf '\r- Download completed: %s\n' "$OUT"
+    return 0
+}
+
+
 DOWNLOAD_FIRMWARE() {
     echo " "
 
