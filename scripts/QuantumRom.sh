@@ -2644,25 +2644,6 @@ BUILD_IMG() {
             # Purge any remaining VCS artifacts (.gitkeep, .gitignore)
             find "$SOURCE_DIR" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
 
-            # Ensure any files/dirs on disk missing from FS_CONFIG are appended so mkfs.erofs will not fail
-            local TMP_EXISTING="$(mktemp)"
-            awk '{print $1}' "$FS_CONFIG" > "$TMP_EXISTING"
-            find "$SOURCE_DIR" -mindepth 1 \( -type f -o -type d -o -type l \) | while IFS= read -r item; do
-                local REL_PATH="${item#${EXTRACTED_FIRM_DIR}/$PARTITION/}"
-                local PATH_ENTRY="$PARTITION/$REL_PATH"
-                grep -qxF "$PATH_ENTRY" "$TMP_EXISTING" && continue
-                if [ -d "$item" ]; then
-                    echo "- Appending missing directory to vendor fs_config: $PATH_ENTRY"
-                    printf "%s 0 0 0755\n" "$PATH_ENTRY" >> "$FS_CONFIG"
-                elif [[ "$REL_PATH" == */bin/* ]]; then
-                    echo "- Appending missing binary to vendor fs_config: $PATH_ENTRY"
-                    printf "%s 0 2000 0755\n" "$PATH_ENTRY" >> "$FS_CONFIG"
-                else
-                    echo "- Appending missing file to vendor fs_config: $PATH_ENTRY"
-                    printf "%s 0 0 0644\n" "$PATH_ENTRY" >> "$FS_CONFIG"
-                fi
-            done
-            rm -f "$TMP_EXISTING"
         else
             mkdir -p "${EXTRACTED_FIRM_DIR}/${PARTITION}/lost+found"
 
