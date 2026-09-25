@@ -3046,61 +3046,114 @@ DOWNLOAD_KERNEL_PACKAGE() {
     local LATEST_RELEASE_URL="https://api.github.com/repos/${KERNEL_REPO}/releases/latest"
     local RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$LATEST_RELEASE_URL")
 
-    if ! echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
+    if ! echo "$RELEASE_JSON" | grep -q '"assets"'; then
         echo "[!] Checking releases list..."
-        RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "https://api.github.com/repos/${KERNEL_REPO}/releases" | jq -r '.[0]')
+        RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "https://api.github.com/repos/${KERNEL_REPO}/releases" | python3 -c "import sys, json; data=json.load(sys.stdin); print(json.dumps(data[0]) if isinstance(data, list) and len(data) > 0 else '{}')" 2>/dev/null)
     fi
 
-    if echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
-        echo "$RELEASE_JSON" | jq -r '.assets[] | "\(.name) \(.browser_download_url)"' | while read -r name url; do
-            [ -z "$name" ] || [ "$name" = "null" ] && continue
-            if [ "$name" = "dtbo.img" ]; then
-                echo "[!] Skipping dtbo.img (preventing dangerous DTBO overwrite)"
-                continue
-            fi
-            echo "[+] Downloading asset: $name"
-            curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$url" -o "$OUT_DIR/$name"
-        done
+    # Select the optimal kernel package from release assets (favoring *-latest.zip, then newest date tag)
+    local SELECTED_ASSET_INFO=$(python3 -c "
+import sys, json, os, re
 
-        # Standardize names (sort by 8-digit date tag and version to ensure newest timestamped build is picked)
-        local LATEST_KERNEL_ZIP=""
-        if command -v python3 >/dev/null 2>&1; then
-            LATEST_KERNEL_ZIP=$(python3 -c "
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+
+assets = data.get('assets', [])
+if not assets:
+    sys.exit(0)
+
+codes = set()
+for item in [os.environ.get('STOCK_DEVICE', ''), os.environ.get('STOCK_PRODUCT_DEVICE', ''), os.environ.get('STOCK_NAME', '')]:
+    if item:
+        codes.add(item.lower())
+        s1 = re.sub(r'(wifi|lte|xx)$', '', item.lower())
+        if s1: codes.add(s1)
+        s2 = re.sub(r'(wifi|lte|xx)$', '', s1)
+        if s2: codes.add(s2)
+
+zip_assets = [a for a in assets if a.get('name', '').lower().endswith('.zip') and ('legion' in a['name'].lower() or 'anykernel' in a['name'].lower())]
+
+selected = None
+# 1. Device-specific latest (e.g. legion-gta4xlve-latest.zip)
+for code in codes:
+    for a in zip_assets:
+        aname = a['name'].lower()
+        if 'latest' in aname and code in aname:
+            selected = a
+            break
+    if selected:
+        break
+
+# 2. Generic latest (e.g. legion-latest.zip)
+if not selected:
+    for a in zip_assets:
+        if 'latest' in a['name'].lower():
+            selected = a
+            break
+
+# 3. Newest timestamped build (sort by 8-digit date tag, then updated_at)
+if not selected and zip_assets:
+    dev_zips = [a for a in zip_assets if any(code in a['name'].lower() for code in codes)]
+    pool = dev_zips if dev_zips else zip_assets
+    pool.sort(key=lambda a: (
+        re.search(r'(\d{8})', a['name']).group(1) if re.search(r'(\d{8})', a['name']) else '',
+        a.get('updated_at', '')
+    ))
+    selected = pool[-1]
+
+if selected:
+    print(f\"{selected['name']}\t{selected['browser_download_url']}\")
+" <<< "$RELEASE_JSON" 2>/dev/null)
+
+    if [ -n "$SELECTED_ASSET_INFO" ]; then
+        local ASSET_NAME=$(echo "$SELECTED_ASSET_INFO" | cut -f1)
+        local ASSET_URL=$(echo "$SELECTED_ASSET_INFO" | cut -f2)
+        echo "[+] Downloading newest kernel package: $ASSET_NAME"
+        curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$ASSET_URL" -o "$OUT_DIR/kernel.zip"
+        [ "$ASSET_NAME" != "kernel.zip" ] && cp -f "$OUT_DIR/kernel.zip" "$OUT_DIR/$ASSET_NAME"
+    fi
+
+    # Fallback to local files if release API did not yield kernel.zip
+    if [ ! -f "$OUT_DIR/kernel.zip" ]; then
+        local LOCAL_KERNEL_ZIP=$(python3 -c "
 import glob, os, re
 files = glob.glob('$OUT_DIR/legion*.zip') + glob.glob('$OUT_DIR/AnyKernel3*.zip')
 if files:
-    files.sort(key=lambda f: (re.search(r'(\d{8})', os.path.basename(f)).group(1) if re.search(r'(\d{8})', os.path.basename(f)) else '', os.path.basename(f)))
-    print(files[-1])
+    latests = [f for f in files if 'latest' in os.path.basename(f).lower()]
+    if latests:
+        print(latests[0])
+    else:
+        files.sort(key=lambda f: (re.search(r'(\d{8})', os.path.basename(f)).group(1) if re.search(r'(\d{8})', os.path.basename(f)) else '', os.path.basename(f)))
+        print(files[-1])
 " 2>/dev/null)
+        [ -z "$LOCAL_KERNEL_ZIP" ] && LOCAL_KERNEL_ZIP=$(ls -1 "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | sort -V | tail -n1)
+        if [ -n "$LOCAL_KERNEL_ZIP" ] && [ -f "$LOCAL_KERNEL_ZIP" ]; then
+            echo "[+] Using local kernel package: $(basename "$LOCAL_KERNEL_ZIP")"
+            cp -f "$LOCAL_KERNEL_ZIP" "$OUT_DIR/kernel.zip"
         fi
-        [ -z "$LATEST_KERNEL_ZIP" ] && LATEST_KERNEL_ZIP=$(ls -1 "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | sort -V | tail -n1)
-        if [ -n "$LATEST_KERNEL_ZIP" ] && [ -f "$LATEST_KERNEL_ZIP" ]; then
-            echo "[+] Selected newest kernel package: $(basename "$LATEST_KERNEL_ZIP")"
-            cp -f "$LATEST_KERNEL_ZIP" "$OUT_DIR/kernel.zip"
-        fi
+    fi
 
-        # Always extract Image.gz from the selected kernel package to ensure it overwrites any stale standalone asset
-        if [ -f "$OUT_DIR/kernel.zip" ]; then
-            echo "[+] Extracting Image.gz from newest kernel package..."
-            unzip -oq "$OUT_DIR/kernel.zip" "Image.gz" -d "$OUT_DIR" || true
-        fi
+    # Extract Image.gz from selected kernel package
+    if [ -f "$OUT_DIR/kernel.zip" ]; then
+        echo "[+] Extracting Image.gz from kernel package..."
+        unzip -oq "$OUT_DIR/kernel.zip" "Image.gz" -d "$OUT_DIR" || true
+    fi
 
-        # If Image.gz was downloaded or extracted and no boot.img exists yet, assemble boot.img using stock device template
-        if [ -f "$OUT_DIR/Image.gz" ] && [ ! -f "$OUT_DIR/boot.img" ]; then
-            local TEMPLATE_DIR="${DEVICES_DIR:-$(pwd)/QuantumROM/Devices}/${STOCK_DEVICE}/boot_template"
-            if [ -d "$TEMPLATE_DIR" ] && [ -f "$TEMPLATE_DIR/header.bin" ] && [ -f "$TEMPLATE_DIR/ramdisk.img" ]; then
-                echo "=============================================="
-                echo "  Assembling boot.img from Image.gz + Ramdisk "
-                echo "=============================================="
-                python3 "$(pwd)/scripts/repack_boot.py" \
-                    "$TEMPLATE_DIR/header.bin" \
-                    "$TEMPLATE_DIR/ramdisk.img" \
-                    "$OUT_DIR/Image.gz" \
-                    "$OUT_DIR/boot.img"
-            fi
+    # If Image.gz was downloaded or extracted and no boot.img exists yet, assemble boot.img using stock device template
+    if [ -f "$OUT_DIR/Image.gz" ] && [ ! -f "$OUT_DIR/boot.img" ]; then
+        local TEMPLATE_DIR="${DEVICES_DIR:-$(pwd)/QuantumROM/Devices}/${STOCK_DEVICE}/boot_template"
+        if [ -d "$TEMPLATE_DIR" ] && [ -f "$TEMPLATE_DIR/header.bin" ] && [ -f "$TEMPLATE_DIR/ramdisk.img" ]; then
+            echo "=============================================="
+            echo "  Assembling boot.img from Image.gz + Ramdisk "
+            echo "=============================================="
+            python3 "$(pwd)/scripts/repack_boot.py" \
+                "$TEMPLATE_DIR/header.bin" \
+                "$TEMPLATE_DIR/ramdisk.img" \
+                "$OUT_DIR/Image.gz" \
+                "$OUT_DIR/boot.img"
         fi
-    else
-        echo "[!] Warning: No release assets found in $KERNEL_REPO"
     fi
 }
 
