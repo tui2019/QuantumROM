@@ -3062,8 +3062,18 @@ DOWNLOAD_KERNEL_PACKAGE() {
             curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$url" -o "$OUT_DIR/$name"
         done
 
-        # Standardize names (sort -V ensures newest timestamped build is picked)
-        local LATEST_KERNEL_ZIP=$(ls -1 "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | sort -V | tail -n1)
+        # Standardize names (sort by 8-digit date tag and version to ensure newest timestamped build is picked)
+        local LATEST_KERNEL_ZIP=""
+        if command -v python3 >/dev/null 2>&1; then
+            LATEST_KERNEL_ZIP=$(python3 -c "
+import glob, os, re
+files = glob.glob('$OUT_DIR/legion*.zip') + glob.glob('$OUT_DIR/AnyKernel3*.zip')
+if files:
+    files.sort(key=lambda f: (re.search(r'(\d{8})', os.path.basename(f)).group(1) if re.search(r'(\d{8})', os.path.basename(f)) else '', os.path.basename(f)))
+    print(files[-1])
+" 2>/dev/null)
+        fi
+        [ -z "$LATEST_KERNEL_ZIP" ] && LATEST_KERNEL_ZIP=$(ls -1 "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | sort -V | tail -n1)
         if [ -n "$LATEST_KERNEL_ZIP" ] && [ -f "$LATEST_KERNEL_ZIP" ]; then
             echo "[+] Selected newest kernel package: $(basename "$LATEST_KERNEL_ZIP")"
             cp -f "$LATEST_KERNEL_ZIP" "$OUT_DIR/kernel.zip"
