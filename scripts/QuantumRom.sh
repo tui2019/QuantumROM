@@ -1416,6 +1416,19 @@ PATCH_SELINUX() {
 		    "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_sepolicy.cil" >/dev/null 2>&1
 		REMOVE_LINE '(genfscon proc "/sys/vm/compaction_proactiveness" (u object_r proc_compaction_proactiveness ((s0) (s0))))' \
 		    "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_sepolicy.cil" >/dev/null 2>&1
+
+        # Allow LineageOS Updater (priv_app) to manage /data/lineageos_updates (ota_package_file)
+        if [ -f "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_sepolicy.cil" ]; then
+            if ! grep -q "priv_app ota_package_file" "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_sepolicy.cil"; then
+                echo '(allow priv_app ota_package_file (dir (ioctl read write create getattr setattr lock rename open watch watch_reads add_name remove_name reparent search rmdir)))' >> "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_sepolicy.cil"
+                echo '(allow priv_app ota_package_file (file (ioctl read write create getattr setattr lock append map unlink rename open watch watch_reads)))' >> "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_sepolicy.cil"
+            fi
+        fi
+        if [ -f "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_file_contexts" ]; then
+            if ! grep -q "lineageos_updates" "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_file_contexts"; then
+                echo '/data/lineageos_updates(/.*)? u:object_r:ota_package_file:s0' >> "${EXTRACTED_FIRM_DIR}/system/system/etc/selinux/plat_file_contexts"
+            fi
+        fi
     else
         echo -e "- No system directory found."
     fi
@@ -2348,7 +2361,7 @@ APPLY_CUSTOM_FEATURES() {
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/permissions"
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/sysconfig"
         mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/security"
-        mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/init/hw"
+        mkdir -p "${EXTRACTED_FIRM_DIR}/system/system/etc/init"
         cp -rfa "$(pwd)/QuantumROM/Mods/OTA/system/." "${EXTRACTED_FIRM_DIR}/system/system/"
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "lineage.updater.uri" "https://raw.githubusercontent.com/tui2019/QuantumROM/main/ota/{device}.json"
         BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.lineage.device" "p613"
@@ -2950,16 +2963,16 @@ DOWNLOAD_KERNEL_PACKAGE() {
             curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$url" -o "$OUT_DIR/$name"
         done
 
-        # Standardize names
-        local LATEST_KERNEL_ZIP=$(ls -1t "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | head -n1)
+        # Standardize names (sort -V ensures newest timestamped build is picked)
+        local LATEST_KERNEL_ZIP=$(ls -1 "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | sort -V | tail -n1)
         if [ -n "$LATEST_KERNEL_ZIP" ] && [ -f "$LATEST_KERNEL_ZIP" ]; then
             echo "[+] Selected newest kernel package: $(basename "$LATEST_KERNEL_ZIP")"
             cp -f "$LATEST_KERNEL_ZIP" "$OUT_DIR/kernel.zip"
         fi
 
-        # Extract Image.gz from AnyKernel zip package if needed
-        if [ ! -f "$OUT_DIR/Image.gz" ] && [ -f "$OUT_DIR/kernel.zip" ]; then
-            echo "[+] Extracting Image.gz from AnyKernel package..."
+        # Always extract Image.gz from the selected kernel package to ensure it overwrites any stale standalone asset
+        if [ -f "$OUT_DIR/kernel.zip" ]; then
+            echo "[+] Extracting Image.gz from newest kernel package..."
             unzip -oq "$OUT_DIR/kernel.zip" "Image.gz" -d "$OUT_DIR" || true
         fi
 

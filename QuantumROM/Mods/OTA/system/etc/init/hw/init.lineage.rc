@@ -1,3 +1,0 @@
-on post-fs-data
-    mkdir /data/lineageos_updates 0777 system cache
-    chmod 0777 /data/lineageos_updates
