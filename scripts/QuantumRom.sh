@@ -168,18 +168,23 @@ GET_PROP() {
     case "$PARTITION" in
         system)
             FILE="${EXTRACTED_FIRM_DIR}/system/system/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/system/build.prop"
             ;;
         vendor)
             FILE="${EXTRACTED_FIRM_DIR}/vendor/build.prop"
             ;;
         product)
             FILE="${EXTRACTED_FIRM_DIR}/product/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/product/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/product/build.prop"
             ;;
         system_ext)
             FILE="${EXTRACTED_FIRM_DIR}/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop"
             ;;
         odm)
             FILE="${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/odm/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/odm/build.prop"
             ;;
         *)
             echo -e "Unknown partition: $PARTITION"
@@ -1972,7 +1977,86 @@ APPLY_STOCK_CONFIG() {
         cp -af "${DEVICES_DIR}/${STOCK_DEVICE}/extra/." "$(pwd)/OUT"
     fi
 
-	BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.model" "$STOCK_DEVICE"
+    echo -e "Configuring target device identity for $STOCK_DEVICE..."
+
+    # Resolve target device metadata (from config or vendor/build.prop fallback)
+    local STOCK_NAME=""
+    if [ -n "$STOCK_DEVICE" ] && [ -f "${DEVICES_DIR}/$STOCK_DEVICE/config" ]; then
+        STOCK_NAME="$(grep -m1 '^STOCK_NAME=' "${DEVICES_DIR}/$STOCK_DEVICE/config" | cut -d= -f2 | tr -d '\r')"
+    fi
+    if [ -z "$STOCK_NAME" ] && [ -f "${EXTRACTED_FIRM_DIR}/vendor/build.prop" ]; then
+        STOCK_NAME="$(grep -m1 '^ro\.product\.vendor\.name=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" | cut -d= -f2 | tr -d '\r')"
+    fi
+    [ -z "$STOCK_NAME" ] && STOCK_NAME="gta4xlvewifixx"
+
+    local STOCK_PRODUCT_DEVICE=""
+    if [ -n "$STOCK_DEVICE" ] && [ -f "${DEVICES_DIR}/$STOCK_DEVICE/config" ]; then
+        STOCK_PRODUCT_DEVICE="$(grep -m1 '^STOCK_PRODUCT_DEVICE=' "${DEVICES_DIR}/$STOCK_DEVICE/config" | cut -d= -f2 | tr -d '\r')"
+    fi
+    if [ -z "$STOCK_PRODUCT_DEVICE" ] && [ -f "${EXTRACTED_FIRM_DIR}/vendor/build.prop" ]; then
+        STOCK_PRODUCT_DEVICE="$(grep -m1 '^ro\.product\.vendor\.device=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" | cut -d= -f2 | tr -d '\r')"
+    fi
+    [ -z "$STOCK_PRODUCT_DEVICE" ] && STOCK_PRODUCT_DEVICE="gta4xlvewifi"
+
+    echo "  -> Target Model:  $STOCK_DEVICE"
+    echo "  -> Target Name:   $STOCK_NAME"
+    echo "  -> Target Device: $STOCK_PRODUCT_DEVICE"
+
+    # Set model, name, and device across system, product, and system_ext partitions
+    for part in system product system_ext; do
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "$part" "ro.product.${part}.brand" "samsung" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "$part" "ro.product.${part}.manufacturer" "samsung" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "$part" "ro.product.${part}.model" "$STOCK_DEVICE" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "$part" "ro.product.${part}.name" "$STOCK_NAME" 2>/dev/null || true
+        BUILD_PROP "$EXTRACTED_FIRM_DIR" "$part" "ro.product.${part}.device" "$STOCK_PRODUCT_DEVICE" 2>/dev/null || true
+    done
+
+    # Ensure ODM build.prop is populated (highest priority in ro.product.property_source_order)
+    mkdir -p "${EXTRACTED_FIRM_DIR}/odm/etc"
+    if [ ! -f "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop" ]; then
+        local OS_REL="$(GET_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.system.build.version.release" 2>/dev/null)"
+        [ -z "$OS_REL" ] && OS_REL="16"
+        echo "ro.odm.build.version.release=${OS_REL}" > "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+    fi
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "odm" "ro.product.odm.brand" "samsung" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "odm" "ro.product.odm.manufacturer" "samsung" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "odm" "ro.product.odm.model" "$STOCK_DEVICE" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "odm" "ro.product.odm.name" "$STOCK_NAME" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "odm" "ro.product.odm.device" "$STOCK_PRODUCT_DEVICE" 2>/dev/null || true
+
+    # Clean residual base product/device codenames across all build.prop files
+    local TARGET_PRODUCT_NAME="$(GET_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.build.flavor" 2>/dev/null | sed 's/-user.*//')"
+    [ -z "$TARGET_PRODUCT_NAME" ] && TARGET_PRODUCT_NAME="$(GET_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.name" 2>/dev/null)"
+
+    echo "  -> Replacing residual base codenames ($TARGET_PRODUCT_NAME) with $STOCK_NAME / $STOCK_PRODUCT_DEVICE..."
+
+    for f in "${EXTRACTED_FIRM_DIR}/system/system/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/product/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/product/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system_ext/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/vendor/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"; do
+        if [ -f "$f" ]; then
+            if [ -n "$TARGET_PRODUCT_NAME" ] && [ "$TARGET_PRODUCT_NAME" != "$STOCK_NAME" ]; then
+                sed -i "s|${TARGET_PRODUCT_NAME}|${STOCK_NAME}|g" "$f"
+                local BASE_DEV_SHORT="$(echo "$TARGET_PRODUCT_NAME" | sed 's/xx$//')"
+                local STOCK_DEV_SHORT="$(echo "$STOCK_NAME" | sed 's/xx$//')"
+                [ "$BASE_DEV_SHORT" != "$STOCK_DEV_SHORT" ] && sed -i "s|${BASE_DEV_SHORT}|${STOCK_DEV_SHORT}|g" "$f"
+            fi
+            # Common Exynos base names cleanup (gta4xlswifixx, gta4xlswifi, essi)
+            sed -i "s|gta4xlswifixx|${STOCK_NAME}|g" "$f"
+            sed -i "s|gta4xlswifi|${STOCK_PRODUCT_DEVICE}|g" "$f"
+            sed -i "s|/essi:|/${STOCK_PRODUCT_DEVICE}:|g" "$f"
+            sed -i "s|=essi$|=${STOCK_PRODUCT_DEVICE}|g" "$f"
+        fi
+    done
+
+    # Ensure tablet characteristics
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.build.characteristics" "tablet"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.build.characteristics" "tablet" 2>/dev/null || true
 }
 
 
@@ -1992,18 +2076,23 @@ BUILD_PROP() {
     case "$PARTITION" in
         system)
             local FILE="${EXTRACTED_FIRM_DIR}/system/system/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/system/build.prop"
             ;;
         vendor)
             local FILE="${EXTRACTED_FIRM_DIR}/vendor/build.prop"
             ;;
         product)
             local FILE="${EXTRACTED_FIRM_DIR}/product/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/product/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/product/build.prop"
             ;;
         system_ext)
             local FILE="${EXTRACTED_FIRM_DIR}/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop"
             ;;
         odm)
             local FILE="${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/odm/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/odm/build.prop"
             ;;
         *)
             echo -e "Unknown partition: $PARTITION"
@@ -2921,7 +3010,17 @@ INTEGRATE_CUSTOM_VENDOR() {
     # Ensure minimal odm exists for dynamic partition early mount
     if [ ! -d "${EXTRACTED_FIRM_DIR}/odm" ]; then
         mkdir -p "${EXTRACTED_FIRM_DIR}/odm/etc"
-        echo "ro.odm.build.version.release=16" > "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+        local V_MODEL="$(grep -m1 '^ro\.product\.vendor\.model=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
+        local V_NAME="$(grep -m1 '^ro\.product\.vendor\.name=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
+        local V_DEVICE="$(grep -m1 '^ro\.product\.vendor\.device=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
+        cat <<EOF > "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+ro.odm.build.version.release=16
+ro.product.odm.brand=samsung
+ro.product.odm.manufacturer=samsung
+ro.product.odm.model=${V_MODEL:-SM-P613}
+ro.product.odm.name=${V_NAME:-gta4xlvewifixx}
+ro.product.odm.device=${V_DEVICE:-gta4xlvewifi}
+EOF
     fi
 
     export CUSTOM_VENDOR_INTEGRATED=1
