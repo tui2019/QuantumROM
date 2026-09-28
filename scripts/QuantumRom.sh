@@ -3051,7 +3051,7 @@ DOWNLOAD_KERNEL_PACKAGE() {
         RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "https://api.github.com/repos/${KERNEL_REPO}/releases" | python3 -c "import sys, json; data=json.load(sys.stdin); print(json.dumps(data[0]) if isinstance(data, list) and len(data) > 0 else '{}')" 2>/dev/null)
     fi
 
-    # Select the optimal kernel package from release assets (favoring *-latest.zip, then newest date tag)
+    # Select the -latest.zip kernel package from release assets
     local SELECTED_ASSET_INFO=$(python3 -c "
 import sys, json, os, re
 
@@ -3073,14 +3073,13 @@ for item in [os.environ.get('STOCK_DEVICE', ''), os.environ.get('STOCK_PRODUCT_D
         s2 = re.sub(r'(wifi|lte|xx)$', '', s1)
         if s2: codes.add(s2)
 
-zip_assets = [a for a in assets if a.get('name', '').lower().endswith('.zip') and ('legion' in a['name'].lower() or 'anykernel' in a['name'].lower())]
+latest_zips = [a for a in assets if a.get('name', '').lower().endswith('.zip') and 'latest' in a['name'].lower()]
 
 selected = None
 # 1. Device-specific latest (e.g. legion-gta4xlve-latest.zip)
 for code in codes:
-    for a in zip_assets:
-        aname = a['name'].lower()
-        if 'latest' in aname and code in aname:
+    for a in latest_zips:
+        if code in a['name'].lower():
             selected = a
             break
     if selected:
@@ -3088,58 +3087,33 @@ for code in codes:
 
 # 2. Generic latest (e.g. legion-latest.zip)
 if not selected:
-    for a in zip_assets:
-        if 'latest' in a['name'].lower():
-            selected = a
-            break
-
-# 3. Newest timestamped build (sort by 8-digit date tag, then updated_at)
-if not selected and zip_assets:
-    dev_zips = [a for a in zip_assets if any(code in a['name'].lower() for code in codes)]
-    pool = dev_zips if dev_zips else zip_assets
-    pool.sort(key=lambda a: (
-        re.search(r'(\d{8})', a['name']).group(1) if re.search(r'(\d{8})', a['name']) else '',
-        a.get('updated_at', '')
-    ))
-    selected = pool[-1]
+    for a in latest_zips:
+        selected = a
+        break
 
 if selected:
     print(f\"{selected['name']}\t{selected['browser_download_url']}\")
 " <<< "$RELEASE_JSON" 2>/dev/null)
 
-    if [ -n "$SELECTED_ASSET_INFO" ]; then
-        local ASSET_NAME=$(echo "$SELECTED_ASSET_INFO" | cut -f1)
-        local ASSET_URL=$(echo "$SELECTED_ASSET_INFO" | cut -f2)
-        echo "[+] Downloading newest kernel package: $ASSET_NAME"
-        curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$ASSET_URL" -o "$OUT_DIR/kernel.zip"
-        [ "$ASSET_NAME" != "kernel.zip" ] && cp -f "$OUT_DIR/kernel.zip" "$OUT_DIR/$ASSET_NAME"
+    if [ -z "$SELECTED_ASSET_INFO" ]; then
+        echo "[-] Error: No *-latest.zip kernel package found in release for ${KERNEL_REPO}!"
+        return 1
     fi
 
-    # Fallback to local files if release API did not yield kernel.zip
+    local ASSET_NAME=$(echo "$SELECTED_ASSET_INFO" | cut -f1)
+    local ASSET_URL=$(echo "$SELECTED_ASSET_INFO" | cut -f2)
+    echo "[+] Downloading kernel package: $ASSET_NAME"
+    curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$ASSET_URL" -o "$OUT_DIR/kernel.zip"
+    [ "$ASSET_NAME" != "kernel.zip" ] && cp -f "$OUT_DIR/kernel.zip" "$OUT_DIR/$ASSET_NAME"
+
     if [ ! -f "$OUT_DIR/kernel.zip" ]; then
-        local LOCAL_KERNEL_ZIP=$(python3 -c "
-import glob, os, re
-files = glob.glob('$OUT_DIR/legion*.zip') + glob.glob('$OUT_DIR/AnyKernel3*.zip')
-if files:
-    latests = [f for f in files if 'latest' in os.path.basename(f).lower()]
-    if latests:
-        print(latests[0])
-    else:
-        files.sort(key=lambda f: (re.search(r'(\d{8})', os.path.basename(f)).group(1) if re.search(r'(\d{8})', os.path.basename(f)) else '', os.path.basename(f)))
-        print(files[-1])
-" 2>/dev/null)
-        [ -z "$LOCAL_KERNEL_ZIP" ] && LOCAL_KERNEL_ZIP=$(ls -1 "$OUT_DIR"/legion*.zip "$OUT_DIR"/AnyKernel3*.zip 2>/dev/null | sort -V | tail -n1)
-        if [ -n "$LOCAL_KERNEL_ZIP" ] && [ -f "$LOCAL_KERNEL_ZIP" ]; then
-            echo "[+] Using local kernel package: $(basename "$LOCAL_KERNEL_ZIP")"
-            cp -f "$LOCAL_KERNEL_ZIP" "$OUT_DIR/kernel.zip"
-        fi
+        echo "[-] Error: Failed to download $ASSET_NAME to $OUT_DIR/kernel.zip!"
+        return 1
     fi
 
     # Extract Image.gz from selected kernel package
-    if [ -f "$OUT_DIR/kernel.zip" ]; then
-        echo "[+] Extracting Image.gz from kernel package..."
-        unzip -oq "$OUT_DIR/kernel.zip" "Image.gz" -d "$OUT_DIR" || true
-    fi
+    echo "[+] Extracting Image.gz from kernel package..."
+    unzip -oq "$OUT_DIR/kernel.zip" "Image.gz" -d "$OUT_DIR" || true
 
     # If Image.gz was downloaded or extracted and no boot.img exists yet, assemble boot.img using stock device template
     if [ -f "$OUT_DIR/Image.gz" ] && [ ! -f "$OUT_DIR/boot.img" ]; then
