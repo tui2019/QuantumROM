@@ -92,7 +92,7 @@ jobs:
       - name: Checkout repository.
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: Upstream
           fetch-depth: 1
 
       - name: Set variables
