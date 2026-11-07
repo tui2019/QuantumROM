@@ -572,45 +572,62 @@ DISABLE_FBE() {
         return 1
     fi
 
-    if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
-        return 0
-    fi
+    echo -e "- Disabling forced encryption (FBE/Metadata) in fstab files..."
 
-    local fstab_files=$(grep -lr 'fileencryption' "${EXTRACTED_FIRM_DIR}/vendor/etc" 2>/dev/null)
+    python3 -c "
+import os, re
 
-    for i in $fstab_files; do
-        if [ -f "$i" ]; then
-            echo -e "- Disabling file-based encryption (FBE) for /data."
-            echo -e "- Found $i."
-            sed -i -e 's/^\([^#].*\)fileencryption=[^,]*\(.*\)$/# &\n\1encryptable\2/g' "$i"
-        fi
-    done
+target_dir = '$EXTRACTED_FIRM_DIR'
+fstab_files = []
+for root, dirs, files in os.walk(target_dir):
+    for f in files:
+        if 'fstab' in f.lower():
+            fstab_files.append(os.path.join(root, f))
+
+flags_to_remove = [
+    r'fileencryption=[^,\s]+',
+    r'metadata_encryption=[^,\s]+',
+    r'keydirectory=[^,\s]+',
+    r'wrappedkey_v0',
+    r'wrappedkey',
+    r'encryptable=[^,\s]+',
+    r'encryptable',
+    r'forceencrypt=[^,\s]+',
+    r'forcefde=[^,\s]+'
+]
+
+for path in fstab_files:
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as fp:
+            lines = fp.readlines()
+        mod = False
+        new_lines = []
+        for line in lines:
+            if not line.strip().startswith('#') and re.search(r'\s(/data|/metadata)\s', line):
+                orig = line
+                line = re.sub(r',inlinecrypt\b|\binlinecrypt,?', '', line)
+                for flg in flags_to_remove:
+                    line = re.sub(r',?' + flg + r',?', ',', line)
+                line = re.sub(r',+', ',', line)
+                line = re.sub(r'\t,', '\t', line)
+                line = re.sub(r',\t', '\t', line)
+                line = re.sub(r',\s*$', '\n', line)
+                if line != orig:
+                    mod = True
+            new_lines.append(line)
+        if mod:
+            with open(path, 'w', encoding='utf-8') as fp:
+                fp.writelines(new_lines)
+            print(f'  Stripped encryption from: {path}')
+    except Exception as e:
+        print(f'  Warning: could not process {path}: {e}')
+"
 }
 
 
 DISABLE_FDE() {
-    local EXTRACTED_FIRM_DIR="$1"
-
-    if [ "$#" -ne 1 ]; then
-        echo -e "Usage: ${FUNCNAME[0]} <EXTRACTED_FIRM_DIRECTORY>"
-        return 1
-    fi
-
-    if [ ! -d "${EXTRACTED_FIRM_DIR}/vendor/etc" ]; then
-        return 0
-    fi
-
-    local fstab_files=$(grep -lr 'forceencrypt' "${EXTRACTED_FIRM_DIR}/vendor/etc" 2>/dev/null)
-
-    for i in $fstab_files; do
-        if [ -f "$i" ]; then
-            echo -e "- Disabling full-disk encryption (FDE) for /data..."
-            echo -e "- Found $i."
-            md5=$(md5 "$i")
-            sed -i -e 's/^\([^#].*\)forceencrypt=[^,]*\(.*\)$/# &\n\1encryptable\2/g' "$i"
-            file_changed "$i" "$md5"
-        fi
-    done
+    # Handled by DISABLE_FBE
+    return 0
 }
 
 
