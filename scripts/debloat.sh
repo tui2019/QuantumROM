@@ -61,8 +61,12 @@ SAMSUNG_BIXBY_APPS=(
 
 # SAMSUNG AI / SMART
 SAMSUNG_AI=(
-"LiveTranscribe" "SmartEye" "SmartPush"
-"SmartPush_64" "SmartThingsKit" "SmartTouchCall"
+"LiveTranscribe" "Bixby" "BixbyInterpreter"
+"BixbyVisionFramework3.5" "SettingsBixby"
+"SmartEye" "SmartPush" "SmartPush_64"
+"SmartThingsKit" "SmartTouchCall"
+"VisionIntelligence3.7" "VisionModel-Stub"
+"SumeNNService"
 )
 
 
@@ -250,6 +254,7 @@ DEBLOAT() {
     KICK "$EXTRACTED_FIRM_DIR" "${CARRIER_APPS[@]}"
     KICK "$EXTRACTED_FIRM_DIR" "${SAMSUNG_APPS[@]}"
     KICK "$EXTRACTED_FIRM_DIR" "${SAMSUNG_AI[@]}"
+    KICK "$EXTRACTED_FIRM_DIR" "${SAMSUNG_BIXBY_APPS[@]}"
     KICK "$EXTRACTED_FIRM_DIR" "${GOOGLE_APPS[@]}"
     KICK "$EXTRACTED_FIRM_DIR" "${FACEBOOK_APPS[@]}"
     KICK "$EXTRACTED_FIRM_DIR" "${HARDWARE_DRIVERS[@]}"
