@@ -170,7 +170,7 @@ on:
         options:
           - "True"
           - "False"
-        default: "True"
+        default: "False"
 
       PATCH_FLAG_SECURE:
         description: "Bypass screenshot and screen record detection (True/False)"
