@@ -1,7 +1,7 @@
 ui_print(" ");
 ui_print("============================================");
-ui_print("  Project Revive Installation");
-ui_print("  One UI 8.5 Port for Galaxy Tab S6 Lite (SM-P613)");
+ui_print("  QuantumROM / Project Revive Installation");
+ui_print("  One UI 9 Port for Galaxy Tab S6 Lite (SM-P613)");
 ui_print("============================================");
 ui_print(" ");
 
