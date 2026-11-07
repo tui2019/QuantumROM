@@ -262,6 +262,10 @@ DEBLOAT() {
     rm -rf "$EXTRACTED_FIRM_DIR/system/system/app"/SamsungTTS*
     rm -rf "$EXTRACTED_FIRM_DIR/system/system/etc/init/boot-image.bprof"
     rm -rf "$EXTRACTED_FIRM_DIR/system/system/etc/init/boot-image.prof"
+    rm -rf "$EXTRACTED_FIRM_DIR/system/system/etc/init/tradeinmode.rc"
+    for p in system product system_ext odm optics; do
+        [ -d "$EXTRACTED_FIRM_DIR/$p" ] && find "$EXTRACTED_FIRM_DIR/$p" -name "tradeinmode.rc" -delete 2>/dev/null || true
+    done
     rm -rf "$EXTRACTED_FIRM_DIR/system/system/hidden"
     rm -rf "$EXTRACTED_FIRM_DIR/system/system/preload"
 	rm -rf "$EXTRACTED_FIRM_DIR/system/system/etc/mediasearch"

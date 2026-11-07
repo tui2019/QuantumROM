@@ -182,18 +182,23 @@ GET_PROP() {
     case "$PARTITION" in
         system)
             FILE="${EXTRACTED_FIRM_DIR}/system/system/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/system/build.prop"
             ;;
         vendor)
             FILE="${EXTRACTED_FIRM_DIR}/vendor/build.prop"
             ;;
         product)
             FILE="${EXTRACTED_FIRM_DIR}/product/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/product/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/product/build.prop"
             ;;
         system_ext)
             FILE="${EXTRACTED_FIRM_DIR}/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop"
             ;;
         odm)
             FILE="${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/odm/build.prop" ] && FILE="${EXTRACTED_FIRM_DIR}/odm/build.prop"
             ;;
         *)
             echo -e "Unknown partition: $PARTITION"
@@ -2086,7 +2091,92 @@ APPLY_STOCK_CONFIG() {
         cp -af "${DEVICES_DIR}/${STOCK_DEVICE}/extra/." "${QT_DIR}/OUT"
     fi
 
-	BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.model" "$STOCK_DEVICE"
+    echo -e "Configuring target device identity for $STOCK_DEVICE..."
+
+    # Resolve target device metadata (from config or vendor/build.prop fallback)
+    local STOCK_NAME=""
+    if [ -n "$STOCK_DEVICE" ] && [ -f "${DEVICES_DIR}/$STOCK_DEVICE/config" ]; then
+        STOCK_NAME="$(grep -m1 '^STOCK_NAME=' "${DEVICES_DIR}/$STOCK_DEVICE/config" | cut -d= -f2 | tr -d '\r')"
+    fi
+    if [ -z "$STOCK_NAME" ] && [ -f "${EXTRACTED_FIRM_DIR}/vendor/build.prop" ]; then
+        STOCK_NAME="$(grep -m1 '^ro\.product\.vendor\.name=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" | cut -d= -f2 | tr -d '\r')"
+    fi
+    [ -z "$STOCK_NAME" ] && STOCK_NAME="${STOCK_DEVICE,,}xx"
+
+    local STOCK_PRODUCT_DEVICE=""
+    if [ -n "$STOCK_DEVICE" ] && [ -f "${DEVICES_DIR}/$STOCK_DEVICE/config" ]; then
+        STOCK_PRODUCT_DEVICE="$(grep -m1 '^STOCK_PRODUCT_DEVICE=' "${DEVICES_DIR}/$STOCK_DEVICE/config" | cut -d= -f2 | tr -d '\r')"
+    fi
+    if [ -z "$STOCK_PRODUCT_DEVICE" ] && [ -f "${EXTRACTED_FIRM_DIR}/vendor/build.prop" ]; then
+        STOCK_PRODUCT_DEVICE="$(grep -m1 '^ro\.product\.vendor\.device=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" | cut -d= -f2 | tr -d '\r')"
+    fi
+    [ -z "$STOCK_PRODUCT_DEVICE" ] && STOCK_PRODUCT_DEVICE="${STOCK_DEVICE,,}"
+
+    local STOCK_BRAND="samsung"
+    local STOCK_MANUFACTURER="samsung"
+
+    echo "Target identity: Model=$STOCK_DEVICE, Name=$STOCK_NAME, Device=$STOCK_PRODUCT_DEVICE"
+
+    # 1. System Partition
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.model" "$STOCK_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.name" "$STOCK_NAME"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.device" "$STOCK_PRODUCT_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.brand" "$STOCK_BRAND"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.system.manufacturer" "$STOCK_MANUFACTURER"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.model" "$STOCK_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.name" "$STOCK_NAME"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.device" "$STOCK_PRODUCT_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.brand" "$STOCK_BRAND"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.product.manufacturer" "$STOCK_MANUFACTURER"
+
+    # 2. Product Partition
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.product.model" "$STOCK_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.product.name" "$STOCK_NAME"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.product.device" "$STOCK_PRODUCT_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.product.brand" "$STOCK_BRAND"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.product.manufacturer" "$STOCK_MANUFACTURER"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.model" "$STOCK_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.name" "$STOCK_NAME"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.device" "$STOCK_PRODUCT_DEVICE"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.brand" "$STOCK_BRAND"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.product.manufacturer" "$STOCK_MANUFACTURER"
+
+    # 3. System_Ext Partition (if separate or merged)
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system_ext" "ro.product.system_ext.model" "$STOCK_DEVICE" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system_ext" "ro.product.system_ext.name" "$STOCK_NAME" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system_ext" "ro.product.system_ext.device" "$STOCK_PRODUCT_DEVICE" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system_ext" "ro.product.system_ext.brand" "$STOCK_BRAND" 2>/dev/null || true
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system_ext" "ro.product.system_ext.manufacturer" "$STOCK_MANUFACTURER" 2>/dev/null || true
+
+    # Clean residual product codenames across all build.prop files and fingerprints
+    local TARGET_PRODUCT_NAME="$(grep -m1 '^ro\.product\.system\.name=' "${EXTRACTED_FIRM_DIR}/system/system/build.prop" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
+    for f in "${EXTRACTED_FIRM_DIR}/system/system/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/product/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/product/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system_ext/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/vendor/build.prop" \
+             "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"; do
+        if [ -f "$f" ]; then
+            if [ -n "$TARGET_PRODUCT_NAME" ] && [ "$TARGET_PRODUCT_NAME" != "$STOCK_NAME" ]; then
+                sed -i "s|${TARGET_PRODUCT_NAME}|${STOCK_NAME}|g" "$f"
+                local BASE_DEV_SHORT="$(echo "$TARGET_PRODUCT_NAME" | sed 's/xx$//')"
+                local STOCK_DEV_SHORT="$(echo "$STOCK_NAME" | sed 's/xx$//')"
+                [ "$BASE_DEV_SHORT" != "$STOCK_DEV_SHORT" ] && sed -i "s|${BASE_DEV_SHORT}|${STOCK_DEV_SHORT}|g" "$f"
+            fi
+            # Common Exynos base names cleanup (gta4xlswifixx, gta4xlswifi, essi)
+            sed -i "s|gta4xlswifixx|${STOCK_NAME}|g" "$f"
+            sed -i "s|gta4xlswifi|${STOCK_PRODUCT_DEVICE}|g" "$f"
+            sed -i "s|/essi:|/${STOCK_PRODUCT_DEVICE}:|g" "$f"
+            sed -i "s|=essi$|=${STOCK_PRODUCT_DEVICE}|g" "$f"
+        fi
+    done
+
+    # Ensure tablet characteristics
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "system" "ro.build.characteristics" "tablet"
+    BUILD_PROP "$EXTRACTED_FIRM_DIR" "product" "ro.build.characteristics" "tablet" 2>/dev/null || true
 }
 
 
@@ -2106,18 +2196,23 @@ BUILD_PROP() {
     case "$PARTITION" in
         system)
             local FILE="${EXTRACTED_FIRM_DIR}/system/system/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/system/build.prop"
             ;;
         vendor)
             local FILE="${EXTRACTED_FIRM_DIR}/vendor/build.prop"
             ;;
         product)
             local FILE="${EXTRACTED_FIRM_DIR}/product/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/product/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/product/build.prop"
             ;;
         system_ext)
             local FILE="${EXTRACTED_FIRM_DIR}/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/system/system_ext/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/system/system/system_ext/etc/build.prop"
             ;;
         odm)
             local FILE="${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+            [ ! -f "$FILE" ] && [ -f "${EXTRACTED_FIRM_DIR}/odm/build.prop" ] && local FILE="${EXTRACTED_FIRM_DIR}/odm/build.prop"
             ;;
         *)
             echo -e "Unknown partition: $PARTITION"
@@ -2194,6 +2289,11 @@ DISABLE_SECURITY() {
         echo "- Disabling stock recovery restoration."
         rm -rf "${EXTRACTED_FIRM_DIR}/vendor/recovery-from-boot.p"
     fi
+
+    # Disable Android 16/17 Trade-In Mode kill trigger
+    for part_dir in system product system_ext odm optics; do
+        [ -d "${EXTRACTED_FIRM_DIR}/$part_dir" ] && find "${EXTRACTED_FIRM_DIR}/$part_dir" -name "tradeinmode.rc" -delete 2>/dev/null || true
+    done
 
 	DISABLE_FBE "$EXTRACTED_FIRM_DIR"
 	DISABLE_FDE "$EXTRACTED_FIRM_DIR"
@@ -2680,6 +2780,26 @@ GEN_FS_CONFIG() {
 
     rm -f "$TMP_EXISTING"
 
+    # Ensure root partition entries are present in fs_config for mkfs.erofs / make_ext4fs
+    if ! grep -qE "^${PARTITION}[[:space:]]" "$FS_CONFIG"; then
+        printf "%s 0 0 0755\n" "$PARTITION" >> "$FS_CONFIG"
+    fi
+    if ! grep -qE "^/[[:space:]]" "$FS_CONFIG"; then
+        printf "/ 0 0 0755\n" >> "$FS_CONFIG"
+    fi
+
+    # Prune non-existent paths from fs_config to keep it clean and valid
+    local TMP_CLEAN="$(mktemp)"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [ -z "$line" ] && continue
+        local p=$(echo "$line" | awk '{print $1}')
+        local rel_p="${p#${PARTITION}/}"
+        if [ "$p" = "$PARTITION" ] || [ "$p" = "/" ] || [ "$p" = "/$PARTITION" ] || [ -e "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ] || [ -L "${EXTRACTED_FIRM_DIR}/${PARTITION}/${rel_p}" ]; then
+            echo "$line" >> "$TMP_CLEAN"
+        fi
+    done < "$FS_CONFIG"
+    mv "$TMP_CLEAN" "$FS_CONFIG"
+
     echo -e "- $PARTITION fs_config generated"
 	chmod -R u+rwX "$EXTRACTED_FIRM_DIR"
 }
@@ -2779,6 +2899,11 @@ GEN_FILE_CONTEXTS() {
         echo "- Added: /${PARTITION}(/.*)? ${CONTEXT}"
     fi
 
+    if ! grep -qE "^/${PARTITION}[[:space:]]" "$FILE_CONTEXTS"; then
+        printf "/%s %s\n" "$PARTITION" "$CONTEXT" >> "$FILE_CONTEXTS"
+        echo "- Added: /${PARTITION} ${CONTEXT}"
+    fi
+
     echo -e "- $PARTITION file_contexts generated"
 
     unset EXISTING
@@ -2803,35 +2928,45 @@ BUILD_IMG() {
     build_img() {
         local PARTITION="$1"
 
-        mkdir -p "${EXTRACTED_FIRM_DIR}/${PARTITION}/lost+found"
-
-        GEN_FS_CONFIG "$EXTRACTED_FIRM_DIR" "$PARTITION"
-        GEN_FILE_CONTEXTS "$EXTRACTED_FIRM_DIR" "$PARTITION"
-
         local SOURCE_DIR="${EXTRACTED_FIRM_DIR}/$PARTITION"
         local OUT_IMG="$OUT_DIR/${PARTITION}.img"
         local FS_CONFIG="${EXTRACTED_FIRM_DIR}/config/${PARTITION}_fs_config"
         local FILE_CONTEXTS="${EXTRACTED_FIRM_DIR}/config/${PARTITION}_file_contexts"
+        local MOUNT_POINT="/$PARTITION"
 
         [[ -d "$SOURCE_DIR" ]] || return
 
+        if [ "$PARTITION" = "vendor" ] && [ -f "$FS_CONFIG" ] && [ -f "$FILE_CONTEXTS" ]; then
+            echo "=============================================="
+            echo " Packing vendor directly as-is (no modifying) "
+            echo "=============================================="
+
+            # Purge any remaining VCS artifacts (.gitkeep, .gitignore)
+            find "$SOURCE_DIR" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+
+        else
+            mkdir -p "${EXTRACTED_FIRM_DIR}/${PARTITION}/lost+found"
+
+            GEN_FS_CONFIG "$EXTRACTED_FIRM_DIR" "$PARTITION"
+            GEN_FILE_CONTEXTS "$EXTRACTED_FIRM_DIR" "$PARTITION"
+
+            [[ -f "$FS_CONFIG" ]] || {
+                echo -e "Warning: $FS_CONFIG missing, skipping $PARTITION"
+                return
+            }
+
+            [[ -f "$FILE_CONTEXTS" ]] || {
+                echo -e "Warning: $FILE_CONTEXTS missing, skipping $PARTITION"
+                return
+            }
+
+            sort -u "$FILE_CONTEXTS" -o "$FILE_CONTEXTS"
+            sort -u "$FS_CONFIG" -o "$FS_CONFIG"
+        fi
+
         local EXTRACTED_SIZE=$(du -sb --apparent-size "$SOURCE_DIR" | cut -f1)
-        local MOUNT_POINT="/$PARTITION"
 
         rm -rf "$OUT_IMG"
-
-        [[ -f "$FS_CONFIG" ]] || {
-            echo -e "Warning: $FS_CONFIG missing, skipping $PARTITION"
-            return
-        }
-
-        [[ -f "$FILE_CONTEXTS" ]] || {
-            echo -e "Warning: $FILE_CONTEXTS missing, skipping $PARTITION"
-            return
-        }
-
-        sort -u "$FILE_CONTEXTS" -o "$FILE_CONTEXTS"
-        sort -u "$FS_CONFIG" -o "$FS_CONFIG"
 
         if [[ "$FILE_SYSTEM" == "erofs" ]]; then
             echo " "
@@ -2844,7 +2979,7 @@ BUILD_IMG() {
                 -z lz4hc \
                 -b 4096 \
                 -T 1199145600 \
-                "$OUT_IMG" "$SOURCE_DIR" >/dev/null 2>&1
+                "$OUT_IMG" "$SOURCE_DIR"
 
         elif [[ "$FILE_SYSTEM" == "ext4" ]]; then
             echo " "
@@ -2907,6 +3042,16 @@ BUILD_IMG() {
         else
             echo -e "- Unsupported filesystem: $FILE_SYSTEM"
             return
+        fi
+
+        if [ "$PARTITION" = "vendor" ] && [ -f "${EXTRACTED_FIRM_DIR}/config/vendor_size.txt" ]; then
+            local PARTITION_MAX_SIZE=$(tr -d '[:space:]' < "${EXTRACTED_FIRM_DIR}/config/vendor_size.txt")
+            local IMG_SIZE=$(stat -c%s "$OUT_IMG" 2>/dev/null || stat -f%z "$OUT_IMG")
+            echo "[+] Built vendor.img: $IMG_SIZE bytes (partition limit: $PARTITION_MAX_SIZE bytes)"
+            if [ -n "$PARTITION_MAX_SIZE" ] && [ "$IMG_SIZE" -gt "$PARTITION_MAX_SIZE" ]; then
+                echo "[-] Error: vendor.img size ($IMG_SIZE bytes) exceeds partition limit ($PARTITION_MAX_SIZE bytes)!"
+                return 1
+            fi
         fi
     }
 
@@ -2973,7 +3118,7 @@ BUILD_SUPER_IMG() {
 
         echo "Adding: $part_name ($size bytes)"
 
-        PARTITIONS+=" --partition ${part_name}:readonly:${size}:main"
+        PARTITIONS+=" --partition ${part_name}:readonly:${size}:qti_dynamic_partitions"
         IMAGES+=" --image ${part_name}=$img"
         TOTAL_SIZE=$((TOTAL_SIZE + size))
         VALID_IMAGES=1
@@ -2986,13 +3131,195 @@ BUILD_SUPER_IMG() {
 
     TOTAL_SIZE=$((TOTAL_SIZE + 4194304))
 
+    local SUPER_DEVICE_SIZE=8891924480
+    local GROUP_SIZE=$((TOTAL_SIZE + 33554432))
+    [ "$GROUP_SIZE" -gt "$SUPER_DEVICE_SIZE" ] && SUPER_DEVICE_SIZE=$((GROUP_SIZE + 4194304))
+
     $lpmake \
-	    --device super:$TOTAL_SIZE \
+        --device super:$SUPER_DEVICE_SIZE \
         --metadata-size 65536 \
         --metadata-slots 2 \
-		--group main:$TOTAL_SIZE \
-		--block-size 4096 \
+        --group qti_dynamic_partitions:$GROUP_SIZE \
+        --group main:$GROUP_SIZE \
+        --block-size 4096 \
         $PARTITIONS \
         $IMAGES \
         --output "$OUTPUT_IMG"
+}
+
+
+INTEGRATE_CUSTOM_VENDOR() {
+    echo " "
+    if [ "$#" -lt 2 ]; then
+        echo -e "Usage: ${FUNCNAME[0]} <VENDOR_SRC_DIR> <EXTRACTED_FIRM_DIR>"
+        return 1
+    fi
+
+    local VENDOR_SRC_DIR="$1"
+    local EXTRACTED_FIRM_DIR="$2"
+
+    [ ! -d "$VENDOR_SRC_DIR" ] && {
+        echo "- Vendor source dir not found: $VENDOR_SRC_DIR"
+        return 0
+    }
+
+    echo "=============================================="
+    echo "   Integrating Custom Vendor (gta4xlve/sm7125) "
+    echo "=============================================="
+
+    rm -rf "${EXTRACTED_FIRM_DIR}/vendor"
+    mkdir -p "${EXTRACTED_FIRM_DIR}/vendor"
+
+    if [ -d "$VENDOR_SRC_DIR/vendor" ]; then
+        echo "[+] Copying vendor directory contents from $VENDOR_SRC_DIR/vendor..."
+        cp -a "$VENDOR_SRC_DIR/vendor/." "${EXTRACTED_FIRM_DIR}/vendor/"
+    else
+        echo "[+] Copying vendor root contents..."
+        cp -a "$VENDOR_SRC_DIR/." "${EXTRACTED_FIRM_DIR}/vendor/"
+    fi
+
+    # Handle vendor config if present in vendor repo
+    if [ -d "$VENDOR_SRC_DIR/config" ]; then
+        echo "[+] Using vendor config from repository..."
+        mkdir -p "${EXTRACTED_FIRM_DIR}/config"
+        [ -f "$VENDOR_SRC_DIR/config/vendor_fs_config" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config"
+        [ -f "$VENDOR_SRC_DIR/config/vendor_file_contexts" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_file_contexts" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
+        [ -f "$VENDOR_SRC_DIR/config/vendor_size.txt" ] && cp -f "$VENDOR_SRC_DIR/config/vendor_size.txt" "${EXTRACTED_FIRM_DIR}/config/vendor_size.txt"
+        [ -f "$VENDOR_SRC_DIR/config/odm_fs_config" ] && cp -f "$VENDOR_SRC_DIR/config/odm_fs_config" "${EXTRACTED_FIRM_DIR}/config/odm_fs_config"
+        [ -f "$VENDOR_SRC_DIR/config/odm_file_contexts" ] && cp -f "$VENDOR_SRC_DIR/config/odm_file_contexts" "${EXTRACTED_FIRM_DIR}/config/odm_file_contexts"
+    else
+        # Clear old Exynos vendor config so it gets generated cleanly
+        rm -f "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
+    fi
+
+    # Clean non-vendor artifacts and VCS metadata (.git, .github, .gitkeep, .gitignore)
+    rm -rf "${EXTRACTED_FIRM_DIR}/vendor/config"
+    find "${EXTRACTED_FIRM_DIR}/vendor" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+
+    if [ -d "$VENDOR_SRC_DIR/odm" ]; then
+        echo "[+] Copying custom ODM..."
+        rm -rf "${EXTRACTED_FIRM_DIR}/odm"
+        mkdir -p "${EXTRACTED_FIRM_DIR}/odm"
+        cp -a "$VENDOR_SRC_DIR/odm/." "${EXTRACTED_FIRM_DIR}/odm/"
+        find "${EXTRACTED_FIRM_DIR}/odm" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+        rm -rf "${EXTRACTED_FIRM_DIR}/odm/config"
+    fi
+
+    # Ensure minimal odm exists for dynamic partition early mount
+    if [ ! -d "${EXTRACTED_FIRM_DIR}/odm" ]; then
+        mkdir -p "${EXTRACTED_FIRM_DIR}/odm/etc"
+        local V_MODEL="$(grep -m1 '^ro\.product\.vendor\.model=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
+        local V_NAME="$(grep -m1 '^ro\.product\.vendor\.name=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
+        local V_DEVICE="$(grep -m1 '^ro\.product\.vendor\.device=' "${EXTRACTED_FIRM_DIR}/vendor/build.prop" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
+        cat <<EOF > "${EXTRACTED_FIRM_DIR}/odm/etc/build.prop"
+ro.odm.build.version.release=17
+ro.product.odm.brand=samsung
+ro.product.odm.manufacturer=samsung
+ro.product.odm.model=${V_MODEL:-SM-P613}
+ro.product.odm.name=${V_NAME:-gta4xlvewifixx}
+ro.product.odm.device=${V_DEVICE:-gta4xlvewifi}
+EOF
+    fi
+
+    export CUSTOM_VENDOR_INTEGRATED=1
+    echo "Custom vendor integration complete. Vendor partition will be packed as-is without modifications."
+}
+
+
+DOWNLOAD_KERNEL_PACKAGE() {
+    local KERNEL_REPO="${1:-AlfCraft07/android_kernel_samsung_sm7125}"
+    local OUT_DIR="$2"
+    local TOKEN="${3:-}"
+
+    mkdir -p "$OUT_DIR"
+    echo "=============================================="
+    echo "     Fetching Kernel Package from Release     "
+    echo "=============================================="
+    echo "Repository: $KERNEL_REPO"
+
+    local AUTH_HEADER=""
+    [ -n "$TOKEN" ] && AUTH_HEADER="Authorization: token $TOKEN"
+
+    local LATEST_RELEASE_URL="https://api.github.com/repos/${KERNEL_REPO}/releases/latest"
+    local RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$LATEST_RELEASE_URL")
+
+    if ! echo "$RELEASE_JSON" | grep -q '"assets"'; then
+        echo "[!] Checking releases list..."
+        RELEASE_JSON=$(curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "https://api.github.com/repos/${KERNEL_REPO}/releases" | python3 -c "import sys, json; data=json.load(sys.stdin); print(json.dumps(data[0]) if isinstance(data, list) and len(data) > 0 else '{}')" 2>/dev/null)
+    fi
+
+    # Select the tablet kernel package (e.g. legion-gta4xlveu-*.zip) from release assets
+    local SELECTED_ASSET_INFO=$(python3 -c "
+import sys, json, os
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+
+assets = data.get('assets', [])
+if not assets:
+    sys.exit(0)
+
+# Filter for zip archives
+zips = [a for a in assets if a.get('name', '').lower().endswith('.zip')]
+
+selected = None
+# 1. Target tablet codenames (gta4xlveu, gta4xlve, gta4xl)
+for a in zips:
+    name = a.get('name', '').lower()
+    if 'gta4xl' in name or 'tablet' in name:
+        selected = a
+        break
+
+# 2. Check for STOCK_DEVICE or target device codes if specific
+if not selected:
+    stock_dev = (os.environ.get('STOCK_DEVICE') or '').lower()
+    for a in zips:
+        if stock_dev and stock_dev in a.get('name', '').lower():
+            selected = a
+            break
+
+# 3. Fallback to latest zip
+if not selected and zips:
+    selected = zips[0]
+
+if selected:
+    print(f\"{selected['name']}\t{selected['browser_download_url']}\")
+" <<< "$RELEASE_JSON" 2>/dev/null)
+
+    if [ -z "$SELECTED_ASSET_INFO" ]; then
+        echo "[-] Error: No tablet kernel package found in release for ${KERNEL_REPO}!"
+        return 1
+    fi
+
+    local ASSET_NAME=$(echo "$SELECTED_ASSET_INFO" | cut -f1)
+    local ASSET_URL=$(echo "$SELECTED_ASSET_INFO" | cut -f2)
+    echo "[+] Downloading kernel package: $ASSET_NAME"
+    curl -sSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$ASSET_URL" -o "$OUT_DIR/kernel.zip"
+    [ "$ASSET_NAME" != "kernel.zip" ] && cp -f "$OUT_DIR/kernel.zip" "$OUT_DIR/$ASSET_NAME"
+
+    if [ ! -f "$OUT_DIR/kernel.zip" ]; then
+        echo "[-] Error: Failed to download $ASSET_NAME to $OUT_DIR/kernel.zip!"
+        return 1
+    fi
+
+    # Extract Image.gz from selected kernel package
+    echo "[+] Extracting Image.gz from kernel package..."
+    unzip -oq "$OUT_DIR/kernel.zip" "Image.gz" -d "$OUT_DIR" || true
+
+    # Assemble boot.img using stock device template
+    if [ -f "$OUT_DIR/Image.gz" ] && [ ! -f "$OUT_DIR/boot.img" ]; then
+        local TEMPLATE_DIR="${DEVICES_DIR:-$(pwd)/QuantumROM/Devices}/${STOCK_DEVICE}/boot_template"
+        if [ -d "$TEMPLATE_DIR" ] && [ -f "$TEMPLATE_DIR/header.bin" ] && [ -f "$TEMPLATE_DIR/ramdisk.img" ]; then
+            echo "=============================================="
+            echo "  Assembling boot.img from Image.gz + Ramdisk "
+            echo "=============================================="
+            python3 "$(pwd)/scripts/repack_boot.py" \
+                "$TEMPLATE_DIR/header.bin" \
+                "$TEMPLATE_DIR/ramdisk.img" \
+                "$OUT_DIR/Image.gz" \
+                "$OUT_DIR/boot.img"
+        fi
+    fi
 }

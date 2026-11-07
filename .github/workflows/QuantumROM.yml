@@ -73,7 +73,7 @@ on:
           - SM-S901E
           - SM-S911B
           - None
-        default: "SM-A225F"
+        default: "SM-P613"
 
       USE_UI_8_TETHERING_APEX:
         description: "Set True if your kernel BPF version is 5.4 (lower than 5.10)."
@@ -87,16 +87,26 @@ on:
       TARGET_DEVICE:
         description: "TARGET_DEVICE_MODEL."
         required: true
-        default: "SM-A346E"
+        default: "SM-X400"
 
       TARGET_DEVICE_CSC_OR_DOWNLOAD_LINK:
         description: "Input target device CSC code or direct download link."
         required: true
-        default: "BKD"
+        default: "KOO"
 
       TARGET_FW_VERSION:
         description: "Specific Samsung firmware version (PDA/CSC/MODEM) OR (AP/CSC/CP)"
         required: false
+
+      VENDOR_REPO:
+        description: "Custom Vendor repository (owner/repo)"
+        required: false
+        default: "tui2019/vendor_samsung_gta4xlve"
+
+      KERNEL_REPO:
+        description: "Kernel repository (owner/repo)"
+        required: false
+        default: "AlfCraft07/android_kernel_samsung_sm7125"
 
       OUTPUT_FILESYSTEM:
         description: "Output filesystem. e.g erofs / ext4 / f2fs"
@@ -133,7 +143,7 @@ on:
         options:
           - "True"
           - "False"
-        default: "True"
+        default: "False"
 
       ADD_CHINA_SMART_MANAGER:
         description: "Add china smart manager (True/False)"
@@ -142,7 +152,7 @@ on:
         options:
           - "True"
           - "False"
-        default: "True"
+        default: "False"
 
       ADD_SAMSUNG_FLAGSHIP_APPS:
         description: "Add samsung flagship apps (True/False)"
@@ -151,7 +161,7 @@ on:
         options:
           - "True"
           - "False"
-        default: "True"
+        default: "False"
 
       ADD_CUSTOM_FEATURES:
         description: "Add samsung custom features (True/False)"
@@ -169,7 +179,7 @@ on:
         options:
           - "True"
           - "False"
-        default: "True"
+        default: "False"
 
       PATCH_SECURE_FOLDER:
         description: "Patch samsung secure folder (True/False)"
@@ -238,15 +248,19 @@ jobs:
 
           echo "OUTPUT_FILESYSTEM=${{ inputs.OUTPUT_FILESYSTEM }}" | tee -a "$GITHUB_ENV"
           echo "COMPRESS_IMG=${{ inputs.COMPRESS_IMG }}" | tee -a "$GITHUB_ENV"
+          echo "VENDOR_REPO=${{ inputs.VENDOR_REPO }}" | tee -a "$GITHUB_ENV"
+          echo "KERNEL_REPO=${{ inputs.KERNEL_REPO }}" | tee -a "$GITHUB_ENV"
 
       - name: Validate STOCK_DEVICE - ${{ inputs.STOCK_DEVICE }}
         run: |
-          REPO="SN-Abdullah-Al-Noman/QuantumROM"
-          BRANCH="Devices"
-
           source "$(pwd)/scripts/git_utils.sh"
 
-          if [ "$STOCK_DEVICE" != "None" ]; then
+          if [ -d "$(pwd)/QuantumROM/Devices/$STOCK_DEVICE" ] && [ -f "$(pwd)/QuantumROM/Devices/$STOCK_DEVICE/config" ]; then
+              echo "✅ Local device configuration found: $STOCK_DEVICE"
+          elif [ "$STOCK_DEVICE" != "None" ]; then
+              REPO="SN-Abdullah-Al-Noman/QuantumROM"
+              BRANCH="Devices"
+
               if ! curl -fsSL -H "Accept: application/vnd.github+json" \
                   "https://api.github.com/repos/$REPO/contents/$STOCK_DEVICE?ref=$BRANCH" >/dev/null; then
 
@@ -255,7 +269,7 @@ jobs:
               fi
 
               echo "✅ Device supported: $STOCK_DEVICE"
-              GIT_SPARSE_DOWNLOAD "SN-Abdullah-Al-Noman/QuantumROM" "Devices" "$STOCK_DEVICE" \
+              GIT_SPARSE_DOWNLOAD "$REPO" "$BRANCH" "$STOCK_DEVICE" \
                   "$(pwd)/QuantumROM/Devices/$STOCK_DEVICE"
           else
               echo "ℹ️ STOCK_DEVICE is set to None."
@@ -319,6 +333,35 @@ jobs:
           sudo bash -c 'source "'"$(pwd)"'/scripts/QuantumRom.sh"; EXTRACT_FIRMWARE_IMG "'"$FIRM_DIR"'" "all"'
           sudo chown -R "$(id -u):$(id -g)" "$FIRM_DIR" && chmod -R u+rwX "$FIRM_DIR"
           rm -rf "$FIRM_DIR"/*.img
+
+      - name: Integrate Custom Vendor ▶️ ${{ env.VENDOR_REPO }}
+        if: env.VENDOR_REPO != ''
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+        run: |
+          source "$(pwd)/scripts/QuantumRom.sh"
+          echo "Cloning vendor repository: $VENDOR_REPO..."
+          rm -rf /tmp/vendor_src
+          git clone --depth=1 "https://github.com/${VENDOR_REPO}.git" /tmp/vendor_src || {
+            if [ -n "$GIT_TOKEN" ]; then
+              git clone --depth=1 "https://${GIT_TOKEN}@github.com/${VENDOR_REPO}.git" /tmp/vendor_src
+            fi
+          }
+
+          if [ -d /tmp/vendor_src ]; then
+            INTEGRATE_CUSTOM_VENDOR "/tmp/vendor_src" "$FIRM_DIR"
+          else
+            echo "[-] Error: Failed to clone vendor repo $VENDOR_REPO!"
+            exit 1
+          fi
+
+      - name: Fetch Kernel Package ▶️ ${{ env.KERNEL_REPO }}
+        if: env.KERNEL_REPO != ''
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN || secrets.GH_TOKEN }}
+        run: |
+          source "$(pwd)/scripts/QuantumRom.sh"
+          DOWNLOAD_KERNEL_PACKAGE "$KERNEL_REPO" "$OUT_DIR" "$GIT_TOKEN"
 
       - name: Debloat Rom - ${{ inputs.DEBLOAT_ROM }}
         run: |
@@ -423,46 +466,16 @@ jobs:
           BUILD_PROP "$FIRM_DIR" "system" "ro.build.display.id" "${B_ID} ${B_V} V-${VERSION}: Built with Quantum Tools"
           BUILD_PROP "$FIRM_DIR" "product" "ro.build.display.id" "${B_ID} ${B_V} V-${VERSION}: Built with Quantum Tools"
           BUILD_IMG "$FIRM_DIR" "all" "$OUTPUT_FILESYSTEM" "$OUT_DIR"
+          BUILD_SUPER_IMG "$OUT_DIR" "$OUT_DIR"
 
-      - name: Compress all .img & make zip file before upload - - ${{ inputs.COMPRESS_IMG }}
+      - name: Package Recovery Flashable ZIP
         run: |
           echo "BUILD_TIME=$(TZ='Asia/Dhaka' date '+%Y-%m-%d %I:%M:%S %p UTC+6')" | tee -a "$GITHUB_ENV"
-          ZIP_NAME="${{ inputs.TARGET_DEVICE }}_Port_For_${{ inputs.STOCK_DEVICE }}.zip"
-          ZIP_PATH="$OUT_DIR/$ZIP_NAME"
-
-          FILE_LIST=$(find "$OUT_DIR" -type f -printf '%P\n' | sort)
-          FILE_COUNT=$(printf '%s\n' "$FILE_LIST" | grep -c . || true)
-
-          {
-              echo "ZIP_FILE_COUNT=$FILE_COUNT"
-              echo "ZIP_FILE_LIST<<EOF"
-              echo "$FILE_LIST"
-              echo "EOF"
-          } >> "$GITHUB_ENV"
-
-          if [ "$COMPRESS_IMG" = "xz" ]; then
-              echo "Compressing all .img files to .xz (level 9)..."
-              for img in "$OUT_DIR"/*.img; do
-                  [ -f "$img" ] || continue
-                  echo "Compressing $img"
-                  xz -5 -T0 "$img"
-              done
-
-          elif [ "$COMPRESS_IMG" = "br" ]; then
-              echo "Compressing all .img files to .br (Brotli level 11)..."
-
-              for img in "$OUT_DIR"/*.img; do
-                  [ -f "$img" ] || continue
-
-                  echo "Compressing $img"
-                  pv -pterab "$img" | brotli -q 5 > "${img}.br"
-                  rm -f "$img"
-              done
-              fi
-
-          echo "Creating zip: $ZIP_NAME"
-          7z a -tzip "$ZIP_PATH" "$OUT_DIR"/* -mx=5
-          echo "ZIP_PATH=$ZIP_PATH" | tee -a "$GITHUB_ENV"
+          DATE_TAG=$(date '+%Y%m%d')
+          ZIP_NAME="${{ inputs.TARGET_DEVICE }}_Port_For_${{ inputs.STOCK_DEVICE }}_Recovery_${DATE_TAG}.zip"
+          bash scripts/make_flashable_zip.sh "$OUT_DIR" "$TARGET_DEVICE" "$STOCK_DEVICE" "$OUT_DIR/kernel.zip" "$ZIP_NAME"
+          echo "ZIP_PATH=$OUT_DIR/$ZIP_NAME" | tee -a "$GITHUB_ENV"
+          echo "ZIP_NAME=$ZIP_NAME" | tee -a "$GITHUB_ENV"
 
       - name: Upload file in GoFile & Create Release.
         env:
