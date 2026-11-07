@@ -2941,8 +2941,22 @@ BUILD_IMG() {
             echo " Packing vendor directly as-is (no modifying) "
             echo "=============================================="
 
-            # Purge any remaining VCS artifacts (.gitkeep, .gitignore)
+            # Purge any remaining non-vendor files (.git*, README*, docs)
             find "$SOURCE_DIR" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+            rm -f "$SOURCE_DIR"/README* "$SOURCE_DIR"/*.md 2>/dev/null || true
+
+            # If any residual file exists in vendor that is not in vendor_fs_config, prune it so mkfs.erofs will not fail
+            local TMP_CANNED="$(mktemp)"
+            awk '{print $1}' "$FS_CONFIG" > "$TMP_CANNED"
+            find "$SOURCE_DIR" -mindepth 1 -type f | while IFS= read -r f; do
+                local REL="${f#${EXTRACTED_FIRM_DIR}/$PARTITION/}"
+                local ENTRY="$PARTITION/$REL"
+                if ! grep -qxF "$ENTRY" "$TMP_CANNED"; then
+                    echo "[-] Removing unindexed vendor file: $ENTRY"
+                    rm -f "$f"
+                fi
+            done
+            rm -f "$TMP_CANNED"
 
         else
             mkdir -p "${EXTRACTED_FIRM_DIR}/${PARTITION}/lost+found"
@@ -3192,9 +3206,10 @@ INTEGRATE_CUSTOM_VENDOR() {
         rm -f "${EXTRACTED_FIRM_DIR}/config/vendor_fs_config" "${EXTRACTED_FIRM_DIR}/config/vendor_file_contexts"
     fi
 
-    # Clean non-vendor artifacts and VCS metadata (.git, .github, .gitkeep, .gitignore)
+    # Clean non-vendor artifacts and VCS metadata (.git, .github, .gitkeep, .gitignore, README.md)
     rm -rf "${EXTRACTED_FIRM_DIR}/vendor/config"
     find "${EXTRACTED_FIRM_DIR}/vendor" -name ".git*" -exec rm -rf {} + 2>/dev/null || true
+    rm -f "${EXTRACTED_FIRM_DIR}/vendor/README.md" "${EXTRACTED_FIRM_DIR}/vendor/README" "${EXTRACTED_FIRM_DIR}/vendor"/*.md 2>/dev/null || true
 
     if [ -d "$VENDOR_SRC_DIR/odm" ]; then
         echo "[+] Copying custom ODM..."
